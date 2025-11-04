@@ -1,0 +1,50 @@
+# --- Python backend ---
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+db.sqlite3
+.env
+.env.*
+.DS_Store
+
+# --- FastAPI / Alembic ---
+alembic.ini
+alembic/
+instance/
+*.log
+
+# --- macOS ---
+.DS_Store
+
+# --- Node / Flutter frontend ---
+node_modules/
+pubspec.lock
+.dart_tool/
+.packages
+build/
+coverage/
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+*.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-configuration
+.idea/
+.vscode/
+
+# --- Logs ---
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Supabase temp files ---
+.supabase/

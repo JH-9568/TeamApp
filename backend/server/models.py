@@ -1,5 +1,6 @@
 from datetime import datetime, date, time
 import uuid
+
 from sqlalchemy import (
     Column, String, Text, DateTime, Date, Time, Integer,
     ForeignKey, Float
@@ -9,6 +10,12 @@ from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
+
+def utcnow():
+    # tz 없이 UTC 찍기
+    return datetime.utcnow()
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -17,10 +24,11 @@ class User(Base):
     name = Column(String(100), nullable=False)
     password_hash = Column(String(255), nullable=False)
     avatar_url = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     teams = relationship("TeamMember", back_populates="user")
+
 
 class Team(Base):
     __tablename__ = "teams"
@@ -29,11 +37,12 @@ class Team(Base):
     name = Column(String(100), nullable=False)
     invite_code = Column(String(20), unique=True, nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     members = relationship("TeamMember", back_populates="team")
     meetings = relationship("Meeting", back_populates="team")
+
 
 class TeamMember(Base):
     __tablename__ = "team_members"
@@ -42,10 +51,11 @@ class TeamMember(Base):
     team_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"))
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     role = Column(String(20), nullable=False, default="member")
-    joined_at = Column(DateTime, default=datetime.utcnow)
+    joined_at = Column(DateTime, default=utcnow)
 
     team = relationship("Team", back_populates="members")
     user = relationship("User", back_populates="teams")
+
 
 class Meeting(Base):
     __tablename__ = "meetings"
@@ -60,12 +70,13 @@ class Meeting(Base):
     summary = Column(Text, nullable=True)
     recording_url = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, default="scheduled")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     team = relationship("Team", back_populates="meetings")
     transcripts = relationship("Transcript", back_populates="meeting")
     action_items = relationship("ActionItem", back_populates="meeting")
+
 
 class Transcript(Base):
     __tablename__ = "transcripts"
@@ -77,9 +88,10 @@ class Transcript(Base):
     timestamp = Column(String(20), nullable=False)
     start_time = Column(Float, nullable=True)
     end_time = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
     meeting = relationship("Meeting", back_populates="transcripts")
+
 
 class ActionItem(Base):
     __tablename__ = "action_items"
@@ -92,7 +104,7 @@ class ActionItem(Base):
     content = Column(Text, nullable=False)
     status = Column(String(20), nullable=False, default="pending")
     due_date = Column(Date, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     meeting = relationship("Meeting", back_populates="action_items")

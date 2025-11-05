@@ -2,19 +2,24 @@ from datetime import datetime, date, time
 import uuid
 
 from sqlalchemy import (
-    Column, String, Text, DateTime, Date, Time, Integer,
-    ForeignKey, Float
+    Column,
+    String,
+    Text,
+    DateTime,
+    Date,
+    Time,
+    Integer,
+    ForeignKey,
+    Float,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
-
 def utcnow():
-    # tz 없이 UTC 찍기
     return datetime.utcnow()
-
 
 class User(Base):
     __tablename__ = "users"
@@ -28,6 +33,10 @@ class User(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     teams = relationship("TeamMember", back_populates="user")
+
+    @property
+    def avatar(self):
+        return self.avatar_url
 
 
 class Team(Base):
@@ -76,6 +85,8 @@ class Meeting(Base):
     team = relationship("Team", back_populates="meetings")
     transcripts = relationship("Transcript", back_populates="meeting")
     action_items = relationship("ActionItem", back_populates="meeting")
+    attendees = relationship("MeetingAttendee", back_populates="meeting")
+    speaker_stats = relationship("SpeakerStatistic", back_populates="meeting")
 
 
 class Transcript(Base):
@@ -108,3 +119,39 @@ class ActionItem(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     meeting = relationship("Meeting", back_populates="action_items")
+
+
+class MeetingAttendee(Base):
+    __tablename__ = "meeting_attendees"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "user_id", name="uq_meeting_attendee_user"),
+        UniqueConstraint("meeting_id", "guest_name", name="uq_meeting_attendee_guest"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    meeting_id = Column(UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    guest_name = Column(String(100), nullable=True)
+    joined_at = Column(DateTime, default=utcnow)
+
+    meeting = relationship("Meeting", back_populates="attendees")
+    user = relationship("User")
+
+
+class SpeakerStatistic(Base):
+    __tablename__ = "speaker_statistics"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "speaker", name="uq_meeting_speaker_stat"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    meeting_id = Column(UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False)
+    speaker = Column(String(100), nullable=False)
+    speak_time = Column(Integer, nullable=False)  # seconds
+    speak_count = Column(Integer, nullable=False)
+    participation_rate = Column(Float, nullable=True)
+    avg_length = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    meeting = relationship("Meeting", back_populates="speaker_stats")

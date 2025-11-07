@@ -11,11 +11,8 @@ from sqlalchemy import select
 
 bearer_scheme = HTTPBearer()
 
-async def get_current_user(
-    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: AsyncSession = Depends(get_db),
-):
-    token = creds.credentials
+
+async def authenticate_token(token: str, db: AsyncSession) -> User:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id: str = payload.get("sub")
@@ -29,6 +26,14 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="User not found")
 
     return user
+
+
+async def get_current_user(
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    token = creds.credentials
+    return await authenticate_token(token, db)
 
 
 async def ensure_team_member(

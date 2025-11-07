@@ -45,3 +45,12 @@ from .speaker_stat import (
     SpeakerStatisticResponse,
     SpeakerStatisticListResponse,
 )
+from .ai import (
+    SummarizeRequest,
+    SummarizeResponse,
+    TranscriptChunk,
+    ActionItemExtractionRequest,
+    ActionItemExtractionResponse,
+    ActionItemSuggestion,
+)
+from .recording import RecordingUploadResponse

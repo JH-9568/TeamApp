@@ -8,6 +8,9 @@ from .routers import (
     action_items,
     attendees,
     speaker_stats,
+    realtime,
+    ai,
+    recordings,
 )
 
 app = FastAPI(title="Team Meeting API")
@@ -20,6 +23,9 @@ app.include_router(transcripts.router)
 app.include_router(action_items.router)
 app.include_router(attendees.router)
 app.include_router(speaker_stats.router)
+app.include_router(realtime.router)
+app.include_router(ai.router)
+app.include_router(recordings.router)
 
 @app.get("/api/health")
 async def health():

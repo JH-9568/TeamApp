@@ -1,4 +1,16 @@
-from . import auth, teams, users, meetings, transcripts, action_items, attendees, speaker_stats
+from . import (
+    auth,
+    teams,
+    users,
+    meetings,
+    transcripts,
+    action_items,
+    attendees,
+    speaker_stats,
+    realtime,
+    ai,
+    recordings,
+)
 
 __all__ = [
     "auth",
@@ -9,4 +21,7 @@ __all__ = [
     "action_items",
     "attendees",
     "speaker_stats",
+    "realtime",
+    "ai",
+    "recordings",
 ]

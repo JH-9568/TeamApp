@@ -141,8 +141,10 @@ class LLMService:
                     "system",
                     "너는 회의 transcript에서 실행 항목을 뽑아 JSON 배열로 반환하는 어시스턴트야. "
                     "반드시 JSON만 출력해. 각 항목은 "
-                    '{"type":"task","assignee":"이름","content":"할 일","dueDate":"YYYY-MM-DD 또는 null"} '
-                    "형식을 지켜.",
+                    '{"type":"task","assignee":"이름","content":"API 문서 정리처럼 짧은 명사형 작업명",'
+                    '"dueDate":"YYYY-MM-DD 또는 이번주 목요일과 같은 상대 날짜"} 형식을 지켜. '
+                    "dueDate는 빈 문자열이나 null을 허용하지 않고, 발화 내용을 바탕으로 가장 그럴듯한 마감을 추론해서 "
+                    "YYYY-MM-DD 또는 '이번주 목요일' 같은 표현으로 채워.",
                 ),
                 (
                     "user",
@@ -226,8 +228,10 @@ class LLMService:
         )
         return (
             "다음 회의 대화록에서 실행 항목을 JSON 배열로 추출해줘. "
-            "각 항목은 {\"type\": \"task\", \"assignee\": \"이름\", \"content\": \"할 일 설명\", "
-            "\"dueDate\": \"YYYY-MM-DD\" | null} 포맷을 지켜.\n\n"
+            "각 항목은 {\"type\": \"task\", \"assignee\": \"이름\", "
+            "\"content\": \"API 문서 정리 처럼 짧은 명사형 작업명\", "
+            "\"dueDate\": \"YYYY-MM-DD\" 혹은 \"이번주 목요일\" 같은 상대 날짜 표현} 포맷을 지켜. "
+            "dueDate는 비워두지 말고 발화에서 유추되는 가장 그럴듯한 날짜를 반드시 넣어.\n\n"
             f"{lines}"
         )
 
@@ -251,16 +255,24 @@ class LLMService:
 
     @staticmethod
     def _fallback_actions(transcript: TranscriptPayload) -> list[dict[str, Any]]:
-        keywords = ("해야", "작업", "task", "action", "필요", "follow up", "확인")
+        keywords = ("해야", "작업", "task", "action", "필요", "follow up", "확인", "까지", "할게")
         items: list[dict[str, Any]] = []
         for chunk in transcript:
             text = chunk.get("text", "")
             if any(keyword in text.lower() for keyword in keywords):
+                content = text.strip()
+                for suffix in ("할게", "할께", "하겠습니다", "할 예정입니다", "할 예정이에요", "할 것 같습니다"):
+                    if content.endswith(suffix):
+                        content = content[: -len(suffix)].rstrip()
+                        break
+                if content.endswith(("입니다", "입니다.", "에요", "예요")):
+                    content = content.rstrip("입니다.에요예요 ").strip()
+                content = content or text.strip()
                 items.append(
                     {
                         "type": "task",
                         "assignee": chunk.get("speaker"),
-                        "content": text.strip(),
+                        "content": content,
                         "dueDate": None,
                     }
                 )

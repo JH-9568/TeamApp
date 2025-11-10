@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -115,7 +115,10 @@ async def extract_action_items(
             assignee=suggestion.get("assignee") or "Unassigned",
             content=suggestion.get("content") or "Action item",
             status="pending",
-            due_date=_parse_due_date(suggestion.get("dueDate")),
+            due_date=_parse_due_date(
+                suggestion.get("dueDate"),
+                reference_date=meeting.date if meeting else None,
+            ),
             created_at=now,
             updated_at=now,
         )
@@ -140,10 +143,32 @@ async def extract_action_items(
         action_items=created,
         persisted=True,
     )
-def _parse_due_date(value: str | None) -> date | None:
+def _parse_due_date(value: str | None, reference_date: date | None = None) -> date | None:
     if not value:
         return None
+    value = value.strip()
     try:
         return datetime.fromisoformat(value).date()
     except ValueError:
-        return None
+        pass
+
+    if reference_date:
+        normalized = value.replace(" ", "")
+        normalized = normalized.replace("까지", "")
+        if "이번주" in normalized or "이번주" in normalized:
+            weekday_map = {
+                "월요일": 0,
+                "화요일": 1,
+                "수요일": 2,
+                "목요일": 3,
+                "금요일": 4,
+                "토요일": 5,
+                "일요일": 6,
+                "일": 6,
+            }
+            for keyword, weekday_idx in weekday_map.items():
+                if keyword in normalized:
+                    delta = (weekday_idx - reference_date.weekday()) % 7
+                    inferred = reference_date + timedelta(days=delta)
+                    return inferred
+    return None

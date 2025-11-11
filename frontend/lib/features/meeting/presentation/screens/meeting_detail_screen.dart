@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import '../../../meeting/data/backend_client.dart';
+import '../../data/meeting_api.dart';
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class MeetingDetailScreen extends StatefulWidget {
+  const MeetingDetailScreen({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
   late final TextEditingController _baseUrlController;
   final TextEditingController _tokenController = TextEditingController();
   final TextEditingController _meetingController = TextEditingController();
@@ -39,7 +39,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  BackendClient get _client => BackendClient(
+  MeetingApi get _client => MeetingApi(
         baseUrl: _baseUrlController.text.trim().replaceAll(RegExp(r'/+$'), ''),
         token: _tokenController.text.trim(),
       );

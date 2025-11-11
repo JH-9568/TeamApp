@@ -37,6 +37,7 @@ dependencies:
   http: ^1.2.2
   web_socket_channel: ^3.0.1
   flutter_dotenv: ^5.1.0
+  dio: ^5.7.0
 
 dev_dependencies:
   flutter_test:

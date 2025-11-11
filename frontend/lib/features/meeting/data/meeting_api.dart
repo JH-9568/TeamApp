@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-class BackendClient {
-  BackendClient({required this.baseUrl, required this.token});
+class MeetingApi {
+  MeetingApi({required this.baseUrl, required this.token});
 
   final String baseUrl;
   final String token;

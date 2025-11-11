@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../routes/app_router.dart';
+import 'router.dart';
+import 'theme.dart';
 
 class TeamMeetingApp extends StatelessWidget {
   const TeamMeetingApp({super.key});
@@ -9,7 +10,7 @@ class TeamMeetingApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Team Meeting Client',
-      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+      theme: AppTheme.light,
       onGenerateRoute: AppRouter.onGenerateRoute,
     );
   }

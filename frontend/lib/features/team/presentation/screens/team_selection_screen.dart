@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class TeamDetailScreen extends StatelessWidget {
-  const TeamDetailScreen({super.key});
+class TeamSelectionScreen extends StatelessWidget {
+  const TeamSelectionScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

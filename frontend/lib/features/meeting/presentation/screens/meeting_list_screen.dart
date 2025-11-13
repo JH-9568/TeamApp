@@ -6,7 +6,7 @@ class MeetingListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(child: Text('Meeting List Screen')),
+      body: SizedBox.shrink(),
     );
   }
 }

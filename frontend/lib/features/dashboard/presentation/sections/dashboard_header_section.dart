@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-class CreateTeamSheet extends StatelessWidget {
-  const CreateTeamSheet({super.key});
+class DashboardHeaderSection extends StatelessWidget {
+  const DashboardHeaderSection({super.key});
 
   @override
   Widget build(BuildContext context) {

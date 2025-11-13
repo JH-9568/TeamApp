@@ -1,39 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/signup_screen.dart';
-import '../features/home/presentation/home_screen.dart';
+import '../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../features/meeting/presentation/screens/meeting_detail_screen.dart';
-import '../features/profile/presentation/profile_screen.dart';
-import '../features/start/presentation/start_screen.dart';
-import '../features/team/presentation/screens/team_list_screen.dart';
+import '../features/meeting/presentation/screens/voice_meeting_screen.dart';
+import '../features/mypage/presentation/mypage_screen.dart';
+import '../features/shell/presentation/app_shell_screen.dart';
+import '../features/team/presentation/screens/team_selection_screen.dart';
+import 'routes.dart';
 
-class AppRouter {
-  static const start = '/';
-  static const login = '/login';
-  static const signup = '/signup';
-  static const teamSelect = '/teams/select';
-  static const home = '/home';
-  static const myPage = '/me';
-  static const meeting = '/meeting';
-
-  static Route<dynamic> onGenerateRoute(RouteSettings settings) {
-    switch (settings.name) {
-      case login:
-        return MaterialPageRoute(builder: (_) => const LoginScreen());
-      case signup:
-        return MaterialPageRoute(builder: (_) => const SignupScreen());
-      case teamSelect:
-        return MaterialPageRoute(builder: (_) => const TeamListScreen());
-      case home:
-        return MaterialPageRoute(builder: (_) => const HomeScreen());
-      case myPage:
-        return MaterialPageRoute(builder: (_) => const ProfileScreen());
-      case meeting:
-        return MaterialPageRoute(builder: (_) => const MeetingDetailScreen());
-      case start:
-      default:
-        return MaterialPageRoute(builder: (_) => const StartScreen());
-    }
-  }
-}
+final appRouterProvider = Provider<GoRouter>((ref) {
+  return GoRouter(
+    initialLocation: AppRoute.login.path,
+    routes: [
+      GoRoute(
+        path: AppRoute.login.path,
+        name: AppRoute.login.name,
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.register.path,
+        name: AppRoute.register.name,
+        builder: (context, state) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.teamSelection.path,
+        name: AppRoute.teamSelection.name,
+        builder: (context, state) => const TeamSelectionScreen(),
+      ),
+      ShellRoute(
+        builder: (context, state, child) => AppShellScreen(child: child),
+        routes: [
+          GoRoute(
+            path: AppRoute.dashboard.path,
+            name: AppRoute.dashboard.name,
+            builder: (context, state) => const DashboardScreen(),
+          ),
+          GoRoute(
+            path: AppRoute.myPage.path,
+            name: AppRoute.myPage.name,
+            builder: (context, state) => const MyPageScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: AppRoute.voiceMeeting.path,
+        name: AppRoute.voiceMeeting.name,
+        builder: (context, state) => const VoiceMeetingScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.meetingDetail.path,
+        name: AppRoute.meetingDetail.name,
+        builder: (context, state) => const MeetingDetailScreen(),
+      ),
+    ],
+    errorBuilder: (context, state) => Scaffold(
+      body: Center(child: Text('Not found: ${state.uri.path}')),
+    ),
+  );
+});

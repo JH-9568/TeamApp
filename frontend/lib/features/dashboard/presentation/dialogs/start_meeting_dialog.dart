@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-class CreateTeamSheet extends StatelessWidget {
-  const CreateTeamSheet({super.key});
+class StartMeetingDialog extends StatelessWidget {
+  const StartMeetingDialog({super.key});
 
   @override
   Widget build(BuildContext context) {

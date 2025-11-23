@@ -18,5 +18,14 @@ final teamRepositoryProvider = Provider<TeamRepository>(
 
 final teamSelectionControllerProvider =
     StateNotifierProvider<TeamSelectionController, TeamSelectionState>(
-      (ref) => TeamSelectionController(ref.watch(teamRepositoryProvider)),
+      (ref) {
+        void handleUnauthorized() {
+          ref.read(authControllerProvider.notifier).logout();
+        }
+
+        return TeamSelectionController(
+          ref.watch(teamRepositoryProvider),
+          handleUnauthorized,
+        );
+      },
     );

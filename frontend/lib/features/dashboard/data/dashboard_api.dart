@@ -6,10 +6,10 @@ import 'package:http/http.dart' as http;
 
 import 'package:frontend/core/errors/unauthorized_exception.dart';
 
-import '../models/team.dart';
+import '../models/dashboard_models.dart';
 
-class TeamApi {
-  TeamApi({String? baseUrl, required String? token})
+class DashboardApi {
+  DashboardApi({String? baseUrl, required String? token})
     : _baseUrl = _normalizeBaseUrl(baseUrl ?? _loadBaseUrl()),
       _token = token;
 
@@ -49,39 +49,69 @@ class TeamApi {
     return baseUrl;
   }
 
-  Future<List<Team>> fetchTeams() async {
-    final response = await http.get(_uri('/api/teams'), headers: _headers);
+  Future<DashboardTeam> fetchTeamDetail(String teamId) async {
+    final response = await http.get(
+      _uri('/api/teams/$teamId'),
+      headers: _headers,
+    );
     _throwOnError(response);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final teams = (body['teams'] as List<dynamic>? ?? [])
+    final teamJson = body['team'] as Map<String, dynamic>;
+    return DashboardTeam.fromJson(teamJson);
+  }
+
+  Future<List<DashboardActionItem>> fetchActionItems(String teamId) async {
+    final response = await http.get(
+      _uri('/api/teams/$teamId/action-items'),
+      headers: _headers,
+    );
+    _throwOnError(response);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = (body['actionItems'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>()
-        .map(Team.fromJson)
+        .map(DashboardActionItem.fromJson)
         .toList();
-    return teams;
+    return items;
   }
 
-  Future<Team> createTeam(String name) async {
-    final response = await http.post(
-      _uri('/api/teams'),
+  Future<List<DashboardMeeting>> fetchMeetings(String teamId) async {
+    final response = await http.get(
+      _uri('/api/teams/$teamId/meetings'),
       headers: _headers,
-      body: jsonEncode({'name': name.trim()}),
     );
     _throwOnError(response);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final teamJson = body['team'] as Map<String, dynamic>;
-    return Team.fromJson(teamJson);
+    final meetings = (body['meetings'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(DashboardMeeting.fromJson)
+        .toList();
+    return meetings;
   }
 
-  Future<Team> joinTeam(String inviteCode) async {
+  Future<DashboardActionItem> createActionItem({
+    required String meetingId,
+    required String type,
+    required String assignee,
+    required String content,
+    String status = 'pending',
+    DateTime? dueDate,
+  }) async {
+    final body = {
+      'type': type.trim(),
+      'assignee': assignee.trim(),
+      'content': content.trim(),
+      'status': status,
+      if (dueDate != null)
+        'dueDate': dueDate.toIso8601String().split('T').first,
+    };
     final response = await http.post(
-      _uri('/api/teams/join'),
+      _uri('/api/meetings/$meetingId/action-items'),
       headers: _headers,
-      body: jsonEncode({'inviteCode': inviteCode.trim()}),
+      body: jsonEncode(body),
     );
     _throwOnError(response);
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final teamJson = body['team'] as Map<String, dynamic>;
-    return Team.fromJson(teamJson);
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return DashboardActionItem.fromJson(json);
   }
 
   void _throwOnError(http.Response response) {

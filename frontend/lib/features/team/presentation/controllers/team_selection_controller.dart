@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:frontend/core/errors/unauthorized_exception.dart';
+
 import '../../../team/data/team_repository.dart';
 import '../../../team/models/team.dart';
 
@@ -47,9 +49,11 @@ class TeamSelectionState {
 }
 
 class TeamSelectionController extends StateNotifier<TeamSelectionState> {
-  TeamSelectionController(this._repository) : super(const TeamSelectionState());
+  TeamSelectionController(this._repository, this._onUnauthorized)
+    : super(const TeamSelectionState());
 
   final TeamRepository _repository;
+  final void Function() _onUnauthorized;
 
   Future<void> loadTeams() async {
     state = state.copyWith(isLoading: true, errorMessage: null);
@@ -60,6 +64,9 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
         teams: teams,
         errorMessage: null,
       );
+    } on UnauthorizedException catch (error) {
+      state = state.copyWith(isLoading: false, errorMessage: error.message);
+      _handleUnauthorized();
     } on http.ClientException catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.message);
     } catch (error) {
@@ -77,6 +84,10 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
         errorMessage: null,
       );
       return team;
+    } on UnauthorizedException catch (error) {
+      state = state.copyWith(isCreating: false, errorMessage: error.message);
+      _handleUnauthorized();
+      rethrow;
     } on http.ClientException catch (error) {
       state = state.copyWith(isCreating: false, errorMessage: error.message);
       rethrow;
@@ -100,6 +111,10 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
         errorMessage: null,
       );
       return team;
+    } on UnauthorizedException catch (error) {
+      state = state.copyWith(isJoining: false, errorMessage: error.message);
+      _handleUnauthorized();
+      rethrow;
     } on http.ClientException catch (error) {
       state = state.copyWith(isJoining: false, errorMessage: error.message);
       rethrow;
@@ -111,5 +126,14 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
 
   void selectTeam(Team team) {
     state = state.copyWith(selectedTeam: team);
+  }
+
+  void reset() {
+    state = const TeamSelectionState();
+  }
+
+  void _handleUnauthorized() {
+    reset();
+    _onUnauthorized();
   }
 }

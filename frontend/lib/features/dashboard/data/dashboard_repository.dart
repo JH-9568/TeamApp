@@ -1,7 +1,44 @@
-class DashboardRepository {
-  const DashboardRepository();
+import '../models/dashboard_models.dart';
+import 'dashboard_api.dart';
 
-  Future<void> load() async {
-    // TODO: implement API 호출
+class DashboardRepository {
+  const DashboardRepository(this._api);
+
+  final DashboardApi _api;
+
+  Future<DashboardData> fetchDashboard(String teamId) async {
+    final teamFuture = _api.fetchTeamDetail(teamId);
+    final actionItemsFuture = _api.fetchActionItems(teamId);
+    final meetingsFuture = _api.fetchMeetings(teamId);
+
+    final results = await Future.wait([
+      teamFuture,
+      actionItemsFuture,
+      meetingsFuture,
+    ]);
+
+    return DashboardData(
+      team: results[0] as DashboardTeam,
+      actionItems: results[1] as List<DashboardActionItem>,
+      meetings: results[2] as List<DashboardMeeting>,
+    );
+  }
+
+  Future<DashboardActionItem> createActionItem({
+    required String meetingId,
+    required String type,
+    required String assignee,
+    required String content,
+    String status = 'pending',
+    DateTime? dueDate,
+  }) {
+    return _api.createActionItem(
+      meetingId: meetingId,
+      type: type,
+      assignee: assignee,
+      content: content,
+      status: status,
+      dueDate: dueDate,
+    );
   }
 }

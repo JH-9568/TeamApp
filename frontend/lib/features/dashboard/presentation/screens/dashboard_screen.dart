@@ -6,6 +6,7 @@ import 'package:frontend/app/routes.dart';
 import 'package:frontend/features/auth/providers.dart';
 import 'package:frontend/features/dashboard/models/dashboard_models.dart';
 import 'package:frontend/features/dashboard/providers.dart';
+import 'package:frontend/features/team/models/team.dart';
 import 'package:frontend/features/team/providers.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -34,6 +35,20 @@ class DashboardScreen extends ConsumerWidget {
     final dashboardState = ref.watch(dashboardControllerProvider(teamId));
     final data = dashboardState.data;
 
+    Future<void> openTeamPicker() async {
+      final controller =
+          ref.read(teamSelectionControllerProvider.notifier);
+      if (!teamState.isLoading && teamState.teams.isEmpty) {
+        controller.loadTeams();
+      }
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => const _TeamPickerSheet(),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F8),
       body: Row(
@@ -49,7 +64,7 @@ class DashboardScreen extends ConsumerWidget {
                 _DashboardHeader(
                   teamName: data?.team.name ?? selectedTeam.name,
                   memberCount: data?.team.members.length ?? 0,
-                  onTeamSwitch: () => context.go(AppRoute.teamSelection.path),
+                  onTeamSwitch: openTeamPicker,
                 ),
                 Expanded(
                   child: dashboardState.isLoading && data == null
@@ -593,6 +608,184 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
+class _TeamPickerSheet extends ConsumerWidget {
+  const _TeamPickerSheet({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final teamState = ref.watch(teamSelectionControllerProvider);
+    final teams = teamState.teams;
+    final selectedTeamId = teamState.selectedTeam?.id;
+
+    return FractionallySizedBox(
+      heightFactor: 0.85,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '팀 선택',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '참여 중인 팀을 선택해 대시보드를 전환하세요.',
+              style: TextStyle(color: Colors.black54, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            if (teamState.isLoading && teams.isEmpty)
+              const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (teams.isEmpty)
+              Expanded(
+                child: Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      context.go(AppRoute.teamSelection.path);
+                    },
+                    icon: const Icon(Icons.group_add_outlined),
+                    label: const Text('팀을 먼저 생성하거나 참여하세요'),
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  itemBuilder: (context, index) {
+                    final team = teams[index];
+                    final isSelected = team.id == selectedTeamId;
+                    return _TeamPickerTile(
+                      team: team,
+                      isSelected: isSelected,
+                      onTap: () {
+                        ref
+                            .read(teamSelectionControllerProvider.notifier)
+                            .selectTeam(team);
+                        Navigator.of(context).pop();
+                      },
+                    );
+                  },
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemCount: teams.length,
+                ),
+              ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      context.go(AppRoute.teamSelection.path);
+                    },
+                    icon: const Icon(Icons.settings_outlined, size: 16),
+                    label: const Text('팀 관리 / 생성'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      foregroundColor: const Color(0xFF111827),
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamPickerTile extends StatelessWidget {
+  const _TeamPickerTile({
+    required this.team,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final Team team;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF111827) : const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.transparent : const Color(0xFFE5E7EB),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.groups_outlined,
+              color: isSelected ? Colors.white : Colors.grey.shade700,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    team.name,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    team.memberCount != null
+                        ? '${team.memberCount}명 참여 중'
+                        : '참여 인원 정보 없음',
+                    style: TextStyle(
+                      color: isSelected
+                          ? Colors.white.withValues(alpha: 0.8)
+                          : Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle, color: Colors.white)
+            else
+              const Icon(Icons.chevron_right, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _StatsRow extends StatelessWidget {
   const _StatsRow({this.data, this.userId});
 
@@ -690,11 +883,14 @@ class _StatCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 Icon(icon, size: 18, color: iconColor),
               ],

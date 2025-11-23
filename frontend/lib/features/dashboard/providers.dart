@@ -1,15 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:frontend/features/auth/providers.dart';
-import 'package:frontend/features/team/providers.dart';
-
 import 'data/dashboard_api.dart';
 import 'data/dashboard_repository.dart';
 import 'presentation/controllers/dashboard_controller.dart';
 
 final dashboardApiProvider = Provider<DashboardApi>((ref) {
-  final authState = ref.watch(authControllerProvider);
-  final token = authState.session?.token;
+  final token = ref.watch(
+    authControllerProvider.select((state) => state.session?.token),
+  );
   return DashboardApi(token: token);
 });
 
@@ -22,9 +21,13 @@ final dashboardControllerProvider =
       ref,
       teamId,
     ) {
-      void handleUnauthorized() {
-        ref.read(authControllerProvider.notifier).logout();
-        ref.read(teamSelectionControllerProvider.notifier).reset();
+      Future<bool> handleUnauthorized() async {
+        final refreshed =
+            await ref.read(authControllerProvider.notifier).refreshSession();
+        if (!refreshed) {
+          ref.read(authControllerProvider.notifier).logout();
+        }
+        return refreshed;
       }
 
       final controller = DashboardController(

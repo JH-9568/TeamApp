@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/presentation/controllers/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/providers.dart';
 import '../features/dashboard/presentation/screens/dashboard_screen.dart';
@@ -13,10 +14,11 @@ import '../features/team/presentation/screens/team_selection_screen.dart';
 import 'routes.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authControllerProvider);
+  final routerNotifier = ref.watch(_routerNotifierProvider);
 
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: AppRoute.login.path,
+    refreshListenable: routerNotifier,
     routes: [
       GoRoute(
         path: AppRoute.login.path,
@@ -60,6 +62,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
     redirect: (context, state) {
+      final authState = routerNotifier.authState;
+
       if (!authState.isInitialized) {
         return null;
       }
@@ -81,4 +85,33 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     errorBuilder: (context, state) =>
         Scaffold(body: Center(child: Text('Not found: ${state.uri.path}'))),
   );
+  ref.onDispose(router.dispose);
+  return router;
 });
+
+final _routerNotifierProvider = Provider<_RouterNotifier>((ref) {
+  final notifier = _RouterNotifier(ref);
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
+
+class _RouterNotifier extends ChangeNotifier {
+  _RouterNotifier(this._ref) {
+    _subscription = _ref.listen<AuthState>(
+      authControllerProvider,
+      (_, __) => notifyListeners(),
+      fireImmediately: true,
+    );
+  }
+
+  final Ref _ref;
+  late final ProviderSubscription<AuthState> _subscription;
+
+  AuthState get authState => _ref.read(authControllerProvider);
+
+  @override
+  void dispose() {
+    _subscription.close();
+    super.dispose();
+  }
+}

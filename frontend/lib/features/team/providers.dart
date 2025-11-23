@@ -7,8 +7,9 @@ import 'data/team_repository.dart';
 import 'presentation/controllers/team_selection_controller.dart';
 
 final teamApiProvider = Provider<TeamApi>((ref) {
-  final authState = ref.watch(authControllerProvider);
-  final token = authState.session?.token;
+  final token = ref.watch(
+    authControllerProvider.select((state) => state.session?.token),
+  );
   return TeamApi(token: token);
 });
 
@@ -19,8 +20,13 @@ final teamRepositoryProvider = Provider<TeamRepository>(
 final teamSelectionControllerProvider =
     StateNotifierProvider<TeamSelectionController, TeamSelectionState>(
       (ref) {
-        void handleUnauthorized() {
-          ref.read(authControllerProvider.notifier).logout();
+        Future<bool> handleUnauthorized() async {
+          final refreshed =
+              await ref.read(authControllerProvider.notifier).refreshSession();
+          if (!refreshed) {
+            ref.read(authControllerProvider.notifier).logout();
+          }
+          return refreshed;
         }
 
         return TeamSelectionController(

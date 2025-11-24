@@ -1,19 +1,67 @@
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+import '../models/meeting_models.dart';
 import 'meeting_api.dart';
 
 class MeetingRepository {
-  MeetingRepository(this._api);
+  const MeetingRepository(this._api);
 
   final MeetingApi _api;
 
-  Future<String> fetchTranscripts(String meetingId) {
-    return _api.getTranscripts(meetingId);
+  Future<MeetingDetail> fetchMeeting(String meetingId) {
+    return _api.fetchMeeting(meetingId);
   }
 
-  Future<String> summarize(String meetingId) {
-    return _api.summarize(meetingId);
+  Future<List<MeetingAttendee>> fetchAttendees(String meetingId) {
+    return _api.fetchAttendees(meetingId);
   }
 
-  Future<String> fetchActionItems(String meetingId) {
-    return _api.extractActionItems(meetingId);
+  Future<String> requestSummary(String meetingId) {
+    return _api.requestSummary(meetingId);
+  }
+
+  Future<List<MeetingActionItem>> requestActionItems(String meetingId) {
+    return _api.requestActionItems(meetingId);
+  }
+
+  Future<MeetingActionItem> createActionItem(
+    String meetingId,
+    ActionItemInput input,
+  ) {
+    return _api.createActionItem(meetingId, input);
+  }
+
+  Future<void> endMeeting(String meetingId) {
+    return _api.endMeeting(meetingId);
+  }
+
+  WebSocketChannel connect(String meetingId) {
+    return _api.connectToMeeting(meetingId);
+  }
+
+  Future<void> registerAttendee(
+    String meetingId, {
+    String? userId,
+    String? guestName,
+  }) {
+    return _api.registerAttendee(
+      meetingId,
+      userId: userId,
+      guestName: guestName,
+    );
+  }
+
+  Future<TranscriptSegment> submitTranscript({
+    required String meetingId,
+    required String speaker,
+    required String text,
+    required String timestamp,
+  }) {
+    return _api.addTranscript(
+      meetingId: meetingId,
+      speaker: speaker,
+      text: text,
+      timestamp: timestamp,
+    );
   }
 }

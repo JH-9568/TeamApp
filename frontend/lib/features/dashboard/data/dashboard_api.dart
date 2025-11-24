@@ -54,6 +54,9 @@ class DashboardApi {
       _uri('/api/teams/$teamId'),
       headers: _headers,
     );
+    debugPrint(
+      '[DashboardApi] GET /api/teams/$teamId -> ${response.statusCode}',
+    );
     _throwOnError(response);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final teamJson = body['team'] as Map<String, dynamic>;
@@ -64,6 +67,9 @@ class DashboardApi {
     final response = await http.get(
       _uri('/api/teams/$teamId/action-items'),
       headers: _headers,
+    );
+    debugPrint(
+      '[DashboardApi] GET /api/teams/$teamId/action-items -> ${response.statusCode}',
     );
     _throwOnError(response);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -78,6 +84,9 @@ class DashboardApi {
     final response = await http.get(
       _uri('/api/teams/$teamId/meetings'),
       headers: _headers,
+    );
+    debugPrint(
+      '[DashboardApi] GET /api/teams/$teamId/meetings -> ${response.statusCode}',
     );
     _throwOnError(response);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -109,9 +118,31 @@ class DashboardApi {
       headers: _headers,
       body: jsonEncode(body),
     );
+    debugPrint(
+      '[DashboardApi] POST /api/meetings/$meetingId/action-items -> ${response.statusCode}',
+    );
     _throwOnError(response);
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     return DashboardActionItem.fromJson(json);
+  }
+
+  Future<DashboardMeeting> createMeeting({
+    required String teamId,
+    required String title,
+  }) async {
+    final payload = {'title': title.trim()};
+    final response = await http.post(
+      _uri('/api/teams/$teamId/meetings'),
+      headers: _headers,
+      body: jsonEncode(payload),
+    );
+    debugPrint(
+      '[DashboardApi] POST /api/teams/$teamId/meetings -> ${response.statusCode}',
+    );
+    _throwOnError(response);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final meetingJson = body['meeting'] as Map<String, dynamic>;
+    return DashboardMeeting.fromJson(meetingJson);
   }
 
   void _throwOnError(http.Response response) {

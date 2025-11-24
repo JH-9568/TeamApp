@@ -32,24 +32,42 @@ async def _fetch_user_name(session, user_id: str | None) -> str:
 
 
 async def _handle_chunk(meeting_id: uuid.UUID, payload: dict[str, Any]) -> None:
-    chunk = payload.get("chunk")
-    if not chunk:
+    chunk_payload = payload.get("chunk")
+    if not chunk_payload:
+        return
+
+    chunk_speaker = None
+    chunk_timestamp = None
+    if isinstance(chunk_payload, dict):
+        chunk_speaker = chunk_payload.get("speaker")
+        chunk_timestamp = chunk_payload.get("timestamp")
+        chunk_base64 = chunk_payload.get("data")
+    else:
+        chunk_base64 = chunk_payload
+
+    if not isinstance(chunk_base64, str) or not chunk_base64.strip():
+        logger.debug("Skipping empty audio chunk for meeting %s", meeting_id)
         return
 
     stt_service = get_whisper_service()
-    text = await stt_service.transcribe_base64(chunk)
+    text = await stt_service.transcribe_base64(chunk_base64)
     if not text:
         logger.info("No transcription produced for meeting %s", meeting_id)
         return
 
     async with AsyncSessionLocal() as session:
         speaker = await _fetch_user_name(session, payload.get("userId"))
+        if chunk_speaker:
+            speaker = chunk_speaker
         transcript = Transcript(
             id=uuid.uuid4(),
             meeting_id=meeting_id,
             speaker=speaker,
             text=text,
-            timestamp=payload.get("timestamp") or payload.get("receivedAt") or datetime.utcnow().isoformat(),
+            timestamp=chunk_timestamp
+            or payload.get("timestamp")
+            or payload.get("receivedAt")
+            or datetime.utcnow().isoformat(),
         )
         session.add(transcript)
         await session.commit()

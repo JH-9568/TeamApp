@@ -11,4 +11,13 @@ class AuthRepository {
 
   Future<AuthSession> signup(String name, String email, String password) =>
       _api.signup(name, email, password);
+
+  Future<AuthSession> refresh(AuthSession currentSession) async {
+    final tokens = await _api.refresh(currentSession.refreshToken);
+    return AuthSession(
+      user: currentSession.user,
+      token: tokens['token']!,
+      refreshToken: tokens['refreshToken']!,
+    );
+  }
 }

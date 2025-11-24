@@ -76,6 +76,25 @@ class AuthApi {
     return AuthSession.fromJson(body);
   }
 
+  Future<Map<String, String>> refresh(String refreshToken) async {
+    final uri = _uri('/api/auth/refresh');
+    debugPrint('[AuthApi] POST $uri (refresh)');
+    final response = await http.post(
+      uri,
+      headers: _headers,
+      body: jsonEncode({'refreshToken': refreshToken}),
+    );
+    debugPrint(
+      '[AuthApi] refresh response ${response.statusCode}: ${response.body}',
+    );
+    _throwOnError(response);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return {
+      'token': body['token'] as String,
+      'refreshToken': body['refreshToken'] as String,
+    };
+  }
+
   void _throwOnError(http.Response response) {
     if (response.statusCode >= 400) {
       debugPrint(

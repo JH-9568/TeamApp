@@ -65,6 +65,10 @@ class DashboardScreen extends ConsumerWidget {
                   teamName: data?.team.name ?? selectedTeam.name,
                   memberCount: data?.team.members.length ?? 0,
                   onTeamSwitch: openTeamPicker,
+                  onMeetingStart: () =>
+                      _handleStartMeeting(context, ref, selectedTeam.id, data),
+                  isMeetingStarting:
+                      dashboardState.isCreatingMeeting || dashboardState.isLoading,
                 ),
                 Expanded(
                   child: dashboardState.isLoading && data == null
@@ -214,6 +218,74 @@ class DashboardScreen extends ConsumerWidget {
         context,
       ).showSnackBar(SnackBar(content: Text('추가에 실패했습니다: $error')));
     }
+  }
+
+  Future<void> _handleStartMeeting(
+    BuildContext context,
+    WidgetRef ref,
+    String teamId,
+    DashboardData? data,
+  ) async {
+    final defaultTitle = '${data?.team.name ?? '팀'} 회의';
+    final title = await _showMeetingTitleDialog(context, defaultTitle);
+    if (title == null) {
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    final controller = ref.read(dashboardControllerProvider(teamId).notifier);
+    try {
+      final meeting = await controller.createMeeting(teamId: teamId, title: title);
+      if (!context.mounted) {
+        return;
+      }
+      context.go('${AppRoute.voiceMeeting.path}?meetingId=${meeting.id}');
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('회의 생성에 실패했습니다: $error')),
+      );
+    }
+  }
+
+  Future<String?> _showMeetingTitleDialog(
+    BuildContext context,
+    String defaultTitle,
+  ) async {
+    final controller = TextEditingController(text: defaultTitle);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('새 회의 시작'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: '회의 제목',
+            ),
+            onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
+              child: const Text('시작'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (result == null || result.isEmpty) {
+      return null;
+    }
+    return result;
   }
 
   Future<_ActionItemFormResult?> _showActionItemDialog(
@@ -537,11 +609,15 @@ class _DashboardHeader extends StatelessWidget {
     required this.teamName,
     required this.memberCount,
     required this.onTeamSwitch,
+    required this.onMeetingStart,
+    this.isMeetingStarting = false,
   });
 
   final String teamName;
   final int memberCount;
   final VoidCallback onTeamSwitch;
+  final VoidCallback onMeetingStart;
+  final bool isMeetingStarting;
 
   @override
   Widget build(BuildContext context) {
@@ -586,10 +662,8 @@ class _DashboardHeader extends StatelessWidget {
             style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
           const Spacer(),
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.videocam_outlined, size: 16),
-            label: const Text('회의 시작', style: TextStyle(fontSize: 13)),
+          ElevatedButton(
+            onPressed: isMeetingStarting ? null : onMeetingStart,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2563EB),
               foregroundColor: Colors.white,
@@ -599,6 +673,23 @@ class _DashboardHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
             ),
+            child: isMeetingStarting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.videocam_outlined, size: 16),
+                      SizedBox(width: 8),
+                      Text('회의 시작', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
           ),
           const SizedBox(width: 16),
           const Icon(Icons.notifications_none, color: Colors.grey),
@@ -609,7 +700,7 @@ class _DashboardHeader extends StatelessWidget {
 }
 
 class _TeamPickerSheet extends ConsumerWidget {
-  const _TeamPickerSheet({super.key});
+  const _TeamPickerSheet();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

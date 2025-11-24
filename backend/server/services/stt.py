@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import os
-import tempfile
 from typing import Optional
 
 from ..config import WHISPER_DEVICE, WHISPER_MODEL
 
 try:
     import whisper  # type: ignore
+    import numpy as np
 except ImportError:  # pragma: no cover
     whisper = None  # type: ignore
+    np = None  # type: ignore
 
 
 class WhisperNotAvailableError(RuntimeError):
@@ -32,21 +32,26 @@ class WhisperService:
         await self._ensure_model()
         assert self._model is not None  # for mypy
 
+        if np is None:  # pragma: no cover
+            raise WhisperNotAvailableError("NumPy is required for Whisper transcription.")
+
         audio_bytes = base64.b64decode(chunk_base64, validate=False)
+        if len(audio_bytes) < 2:
+            return None
+
+        # Ensure we only decode complete 16-bit samples
+        if len(audio_bytes) % 2:
+            audio_bytes = audio_bytes[:-1]
+
+        audio_samples = np.frombuffer(audio_bytes, dtype=np.int16)
+        if audio_samples.size == 0:
+            return None
+
+        audio = audio_samples.astype(np.float32) / 32768.0
         loop = asyncio.get_running_loop()
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(audio_bytes)
-            tmp.flush()
-            tmp_path = tmp.name
-
-        try:
-            result = await loop.run_in_executor(None, self._model.transcribe, tmp_path)
-        finally:
-            try:
-                os.remove(tmp_path)
-            except FileNotFoundError:
-                pass
+        result = await loop.run_in_executor(
+            None, lambda: self._model.transcribe(audio, fp16=False)
+        )
 
         text = (result or {}).get("text", "")
         text = text.strip() if isinstance(text, str) else ""

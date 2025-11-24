@@ -151,10 +151,11 @@ class MeetingApi {
     String? guestName,
   }) async {
     final payload = <String, dynamic>{};
-    if (userId != null) {
-      payload['userId'] = userId;
-    } else if (guestName != null && guestName.isNotEmpty) {
-      payload['guestName'] = guestName;
+    if (userId != null && userId.isNotEmpty) {
+      payload['user_id'] = userId;
+    }
+    if (guestName != null && guestName.isNotEmpty) {
+      payload['guest_name'] = guestName;
     }
     final response = await http.post(
       _uri('/api/meetings/$meetingId/attendees'),

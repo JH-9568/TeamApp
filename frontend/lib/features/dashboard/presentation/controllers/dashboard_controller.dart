@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
@@ -10,24 +11,28 @@ class DashboardState {
   const DashboardState({
     this.isLoading = false,
     this.isCreatingActionItem = false,
+    this.isCreatingMeeting = false,
     this.data,
     this.errorMessage,
   });
 
   final bool isLoading;
   final bool isCreatingActionItem;
+  final bool isCreatingMeeting;
   final DashboardData? data;
   final String? errorMessage;
 
   DashboardState copyWith({
     bool? isLoading,
     bool? isCreatingActionItem,
+    bool? isCreatingMeeting,
     DashboardData? data,
     String? errorMessage,
   }) {
     return DashboardState(
       isLoading: isLoading ?? this.isLoading,
       isCreatingActionItem: isCreatingActionItem ?? this.isCreatingActionItem,
+      isCreatingMeeting: isCreatingMeeting ?? this.isCreatingMeeting,
       data: data ?? this.data,
       errorMessage: errorMessage ?? this.errorMessage,
     );
@@ -39,7 +44,7 @@ class DashboardController extends StateNotifier<DashboardState> {
     : super(const DashboardState());
 
   final DashboardRepository _repository;
-  final void Function() _onUnauthorized;
+  final Future<bool> Function() _onUnauthorized;
 
   Future<void> load(String teamId) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
@@ -47,8 +52,12 @@ class DashboardController extends StateNotifier<DashboardState> {
       final data = await _repository.fetchDashboard(teamId);
       state = DashboardState(isLoading: false, data: data);
     } on UnauthorizedException catch (error) {
+      debugPrint('[DashboardController] load unauthorized: ${error.message}');
+      final refreshed = await _onUnauthorized();
+      if (refreshed) {
+        return load(teamId);
+      }
       state = DashboardState(isLoading: false, errorMessage: error.message);
-      _onUnauthorized();
     } on http.ClientException catch (error) {
       state = DashboardState(isLoading: false, errorMessage: error.message);
     } catch (error) {
@@ -90,11 +99,25 @@ class DashboardController extends StateNotifier<DashboardState> {
         ),
       );
     } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[DashboardController] createActionItem unauthorized: ${error.message}',
+      );
+      final refreshed = await _onUnauthorized();
+      if (refreshed) {
+        state = state.copyWith(isCreatingActionItem: false);
+        return createActionItem(
+          meetingId: meetingId,
+          type: type,
+          assignee: assignee,
+          content: content,
+          status: status,
+          dueDate: dueDate,
+        );
+      }
       state = state.copyWith(
         isCreatingActionItem: false,
         errorMessage: error.message,
       );
-      _onUnauthorized();
     } on http.ClientException catch (error) {
       state = state.copyWith(
         isCreatingActionItem: false,
@@ -104,6 +127,52 @@ class DashboardController extends StateNotifier<DashboardState> {
     } catch (error) {
       state = state.copyWith(
         isCreatingActionItem: false,
+        errorMessage: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<DashboardMeeting> createMeeting({
+    required String teamId,
+    required String title,
+  }) async {
+    state = state.copyWith(isCreatingMeeting: true, errorMessage: null);
+    try {
+      final meeting = await _repository.createMeeting(
+        teamId: teamId,
+        title: title,
+      );
+      final current = state.data;
+      if (current != null) {
+        state = state.copyWith(
+          isCreatingMeeting: false,
+          data: DashboardData(
+            team: current.team,
+            actionItems: current.actionItems,
+            meetings: [meeting, ...current.meetings],
+          ),
+        );
+      } else {
+        state = state.copyWith(isCreatingMeeting: false);
+      }
+      return meeting;
+    } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[DashboardController] createMeeting unauthorized: ${error.message}',
+      );
+      final refreshed = await _onUnauthorized();
+      state = state.copyWith(isCreatingMeeting: false);
+      if (refreshed) {
+        return createMeeting(teamId: teamId, title: title);
+      }
+      throw http.ClientException(error.message);
+    } on http.ClientException {
+      state = state.copyWith(isCreatingMeeting: false);
+      rethrow;
+    } catch (error) {
+      state = state.copyWith(
+        isCreatingMeeting: false,
         errorMessage: error.toString(),
       );
       rethrow;

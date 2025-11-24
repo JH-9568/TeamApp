@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,8 +91,8 @@ class MeetingController extends StateNotifier<MeetingState> {
     if (_initialized) return;
     _initialized = true;
     await load();
+    await _registerAttendee();
     _connect();
-    _registerAttendee();
   }
 
   Future<void> load() async {
@@ -220,11 +221,14 @@ class MeetingController extends StateNotifier<MeetingState> {
   Future<void> _registerAttendee() async {
     if (_attendeeRegistered) return;
     try {
+      final fallbackName = userName.isNotEmpty ? userName : '참여자';
       await _repository.registerAttendee(
         meetingId,
         userId: userId,
-        guestName: userName,
+        guestName: fallbackName,
       );
+      final attendees = await _repository.fetchAttendees(meetingId);
+      state = state.copyWith(attendees: attendees);
       _attendeeRegistered = true;
     } catch (error, stack) {
       debugPrint('Failed to register attendee: $error\n$stack');
@@ -233,6 +237,7 @@ class MeetingController extends StateNotifier<MeetingState> {
 
   void _connect() {
     try {
+      debugPrint('[MeetingController] Connecting websocket for $meetingId');
       _channel = _repository.connect(meetingId);
       _subscription = _channel!.stream.listen(
         _handleSocketEvent,
@@ -252,6 +257,11 @@ class MeetingController extends StateNotifier<MeetingState> {
     final channel = _channel;
     if (channel == null) return;
     try {
+      if (_isSilent(data)) {
+        debugPrint(
+          '[MeetingController] Silent chunk detected (${data.lengthInBytes} bytes) – sending anyway for debugging',
+        );
+      }
       channel.sink.add(
         jsonEncode(
           {
@@ -270,11 +280,13 @@ class MeetingController extends StateNotifier<MeetingState> {
   }
 
   void _handleSocketEvent(dynamic raw) {
+    debugPrint('[MeetingSocket] raw message: $raw');
     Map<String, dynamic>? message;
     if (raw is String) {
       try {
         message = jsonDecode(raw) as Map<String, dynamic>;
       } catch (_) {
+        debugPrint('[MeetingSocket] Failed to decode JSON message');
         return;
       }
     } else if (raw is Map<String, dynamic>) {
@@ -285,8 +297,10 @@ class MeetingController extends StateNotifier<MeetingState> {
     }
     final type = message['type'] as String?;
     final data = (message['data'] as Map<String, dynamic>?) ?? {};
+    debugPrint('[MeetingSocket] type=$type data=$data');
     switch (type) {
       case 'ready':
+        debugPrint('[MeetingSocket] READY event');
         state = state.copyWith(isConnected: true);
         break;
       case 'transcript_segment':
@@ -310,5 +324,25 @@ class MeetingController extends StateNotifier<MeetingState> {
     _subscription?.cancel();
     _channel?.sink.close();
     super.dispose();
+  }
+
+  bool _isSilent(Uint8List data) {
+    if (data.isEmpty) return true;
+    final byteData = data.buffer.asByteData();
+    final sampleCount = data.lengthInBytes ~/ 2;
+    if (sampleCount == 0) return true;
+
+    int nonZero = 0;
+    int maxAbs = 0;
+    for (int i = 0; i < sampleCount; i++) {
+      final sample = byteData.getInt16(i * 2, Endian.little);
+      if (sample != 0) {
+        nonZero++;
+        maxAbs = max(maxAbs, sample.abs());
+      }
+      if (nonZero > 0) break;
+    }
+    debugPrint('[MeetingController] chunk stats: samples=$sampleCount nonZero=$nonZero maxAbs=$maxAbs');
+    return nonZero == 0;
   }
 }

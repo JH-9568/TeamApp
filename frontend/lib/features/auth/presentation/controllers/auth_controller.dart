@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:frontend/common/models/user.dart';
 import 'package:frontend/core/services/auth_service.dart';
 
 import '../../data/auth_repository.dart';
@@ -106,5 +107,39 @@ class AuthController extends StateNotifier<AuthState> {
     await _authService.clearSession();
     debugPrint('[AuthController] logout() completed.');
     state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  Future<bool> refreshSession() async {
+    final current = state.session ?? await _authService.restoreSession();
+    if (current == null) return false;
+    try {
+      debugPrint('[AuthController] refreshSession() start');
+      final refreshed = await _repository.refresh(current);
+      await _authService.persistSession(refreshed);
+      state = AuthState(status: AuthStatus.authenticated, session: refreshed);
+      debugPrint('[AuthController] refreshSession() succeeded');
+      return true;
+    } catch (error) {
+      debugPrint('[AuthController] refreshSession() failed: $error');
+      await _authService.clearSession();
+      state = const AuthState(status: AuthStatus.unauthenticated);
+      return false;
+    }
+  }
+
+  void updateUser(User user) {
+    final current = state.session;
+    if (current == null) return;
+    final updatedSession = AuthSession(
+      user: user,
+      token: current.token,
+      refreshToken: current.refreshToken,
+    );
+    state = AuthState(
+      status: state.status,
+      session: updatedSession,
+      errorMessage: state.errorMessage,
+    );
+    _authService.persistSession(updatedSession);
   }
 }

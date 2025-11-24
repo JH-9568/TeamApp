@@ -15,9 +15,13 @@ bearer_scheme = HTTPBearer()
 async def authenticate_token(token: str, db: AsyncSession) -> User:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        token_type = payload.get("type")
         user_id: str = payload.get("sub")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    if token_type != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
 
     stmt = select(User).where(User.id == user_id)
     res = await db.execute(stmt)

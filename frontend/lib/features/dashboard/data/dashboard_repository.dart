@@ -41,4 +41,11 @@ class DashboardRepository {
       dueDate: dueDate,
     );
   }
+
+  Future<DashboardMeeting> createMeeting({
+    required String teamId,
+    required String title,
+  }) {
+    return _api.createMeeting(teamId: teamId, title: title);
+  }
 }

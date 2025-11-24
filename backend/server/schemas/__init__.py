@@ -3,6 +3,7 @@ from .auth import (
     LoginRequest,
     TokenResponse,
     AuthResponse,
+    RefreshRequest,
 )
 from .user import UserResponse, UserUpdateRequest
 from .team import (

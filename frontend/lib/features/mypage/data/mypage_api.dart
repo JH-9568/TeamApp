@@ -4,12 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:frontend/common/models/user.dart';
 import 'package:frontend/core/errors/unauthorized_exception.dart';
 
-import '../models/team.dart';
-
-class TeamApi {
-  TeamApi({String? baseUrl, required String? token})
+class MyPageApi {
+  MyPageApi({String? baseUrl, required String? token})
     : _baseUrl = _normalizeBaseUrl(baseUrl ?? _loadBaseUrl()),
       _token = token;
 
@@ -49,42 +48,27 @@ class TeamApi {
     return baseUrl;
   }
 
-  Future<List<Team>> fetchTeams() async {
-    final response = await http.get(_uri('/api/teams'), headers: _headers);
-    debugPrint('[TeamApi] GET /api/teams -> ${response.statusCode}');
+  Future<User> fetchProfile() async {
+    final response = await http.get(_uri('/api/users/me'), headers: _headers);
+    debugPrint('[MyPageApi] GET /api/users/me -> ${response.statusCode}');
     _throwOnError(response);
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final teams = (body['teams'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(Team.fromJson)
-        .toList();
-    return teams;
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return User.fromJson(json);
   }
 
-  Future<Team> createTeam(String name) async {
-    final response = await http.post(
-      _uri('/api/teams'),
+  Future<User> updateProfile({String? name, String? avatar}) async {
+    final payload = <String, dynamic>{};
+    if (name != null) payload['name'] = name;
+    if (avatar != null) payload['avatar'] = avatar;
+    final response = await http.patch(
+      _uri('/api/users/me'),
       headers: _headers,
-      body: jsonEncode({'name': name.trim()}),
+      body: jsonEncode(payload),
     );
-    debugPrint('[TeamApi] POST /api/teams -> ${response.statusCode}');
+    debugPrint('[MyPageApi] PATCH /api/users/me -> ${response.statusCode}');
     _throwOnError(response);
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final teamJson = body['team'] as Map<String, dynamic>;
-    return Team.fromJson(teamJson);
-  }
-
-  Future<Team> joinTeam(String inviteCode) async {
-    final response = await http.post(
-      _uri('/api/teams/join'),
-      headers: _headers,
-      body: jsonEncode({'inviteCode': inviteCode.trim()}),
-    );
-    debugPrint('[TeamApi] POST /api/teams/join -> ${response.statusCode}');
-    _throwOnError(response);
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final teamJson = body['team'] as Map<String, dynamic>;
-    return Team.fromJson(teamJson);
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return User.fromJson(json);
   }
 
   void _throwOnError(http.Response response) {

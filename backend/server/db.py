@@ -4,6 +4,7 @@ from .config import DATABASE_URL
 engine = create_async_engine(
     DATABASE_URL,
     echo=True,
+    pool_pre_ping=True,
 )
 
 AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)

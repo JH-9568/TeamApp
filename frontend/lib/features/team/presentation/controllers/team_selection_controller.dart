@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
@@ -53,9 +54,10 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
     : super(const TeamSelectionState());
 
   final TeamRepository _repository;
-  final void Function() _onUnauthorized;
+  final Future<bool> Function() _onUnauthorized;
 
   Future<void> loadTeams() async {
+    if (state.isLoading) return;
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final teams = await _repository.fetchTeams();
@@ -65,8 +67,14 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
         errorMessage: null,
       );
     } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[TeamSelectionController] loadTeams unauthorized: ${error.message}',
+      );
+      final refreshed = await _handleUnauthorized();
+      if (refreshed) {
+        return loadTeams();
+      }
       state = state.copyWith(isLoading: false, errorMessage: error.message);
-      _handleUnauthorized();
     } on http.ClientException catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.message);
     } catch (error) {
@@ -85,8 +93,14 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
       );
       return team;
     } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[TeamSelectionController] createTeam unauthorized: ${error.message}',
+      );
+      final refreshed = await _handleUnauthorized();
+      if (refreshed) {
+        return createTeam(name);
+      }
       state = state.copyWith(isCreating: false, errorMessage: error.message);
-      _handleUnauthorized();
       rethrow;
     } on http.ClientException catch (error) {
       state = state.copyWith(isCreating: false, errorMessage: error.message);
@@ -112,8 +126,14 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
       );
       return team;
     } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[TeamSelectionController] joinTeam unauthorized: ${error.message}',
+      );
+      final refreshed = await _handleUnauthorized();
+      if (refreshed) {
+        return joinTeam(inviteCode);
+      }
       state = state.copyWith(isJoining: false, errorMessage: error.message);
-      _handleUnauthorized();
       rethrow;
     } on http.ClientException catch (error) {
       state = state.copyWith(isJoining: false, errorMessage: error.message);
@@ -132,8 +152,11 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
     state = const TeamSelectionState();
   }
 
-  void _handleUnauthorized() {
-    reset();
-    _onUnauthorized();
+  Future<bool> _handleUnauthorized() async {
+    final refreshed = await _onUnauthorized();
+    if (!refreshed) {
+      reset();
+    }
+    return refreshed;
   }
 }

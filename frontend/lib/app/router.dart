@@ -7,7 +7,7 @@ import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/providers.dart';
 import '../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../features/meeting/presentation/screens/meeting_detail_screen.dart';
-import '../features/meeting/presentation/screens/voice_meeting_screen.dart';
+import '../features/meeting/presentation/screens/meeting_screen.dart';
 import '../features/mypage/presentation/mypage_screen.dart';
 import '../features/shell/presentation/app_shell_screen.dart';
 import '../features/team/presentation/screens/team_selection_screen.dart';
@@ -53,7 +53,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoute.voiceMeeting.path,
         name: AppRoute.voiceMeeting.name,
-        builder: (context, state) => const VoiceMeetingScreen(),
+        builder: (context, state) {
+          final meetingId = state.uri.queryParameters['meetingId'];
+          return MeetingScreen(meetingId: meetingId);
+        },
       ),
       GoRoute(
         path: AppRoute.meetingDetail.path,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import EmailStr, constr
+from pydantic import EmailStr, constr, Field
 
 from .base import SchemaBase
 from .user import UserResponse
@@ -19,8 +19,14 @@ class LoginRequest(SchemaBase):
 
 class TokenResponse(SchemaBase):
     token: str
+    refresh_token: str = Field(..., alias="refreshToken")
 
 
 class AuthResponse(SchemaBase):
     user: UserResponse
     token: str
+    refresh_token: str = Field(..., alias="refreshToken")
+
+
+class RefreshRequest(SchemaBase):
+    refresh_token: str = Field(..., alias="refreshToken")

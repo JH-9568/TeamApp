@@ -258,9 +258,7 @@ class MeetingController extends StateNotifier<MeetingState> {
     if (channel == null) return;
     try {
       if (_isSilent(data)) {
-        debugPrint(
-          '[MeetingController] Silent chunk detected (${data.lengthInBytes} bytes) – sending anyway for debugging',
-        );
+        return;
       }
       channel.sink.add(
         jsonEncode(
@@ -327,22 +325,20 @@ class MeetingController extends StateNotifier<MeetingState> {
   }
 
   bool _isSilent(Uint8List data) {
-    if (data.isEmpty) return true;
+    if (data.isEmpty) {
+      return true;
+    }
     final byteData = data.buffer.asByteData();
     final sampleCount = data.lengthInBytes ~/ 2;
-    if (sampleCount == 0) return true;
-
-    int nonZero = 0;
-    int maxAbs = 0;
-    for (int i = 0; i < sampleCount; i++) {
-      final sample = byteData.getInt16(i * 2, Endian.little);
-      if (sample != 0) {
-        nonZero++;
-        maxAbs = max(maxAbs, sample.abs());
-      }
-      if (nonZero > 0) break;
+    if (sampleCount == 0) {
+      return true;
     }
-    debugPrint('[MeetingController] chunk stats: samples=$sampleCount nonZero=$nonZero maxAbs=$maxAbs');
-    return nonZero == 0;
+    double sum = 0;
+    for (int i = 0; i < sampleCount; i++) {
+      final sample = byteData.getInt16(i * 2, Endian.little).toDouble();
+      sum += sample * sample;
+    }
+    final rms = sqrt(sum / sampleCount);
+    return rms < 800;
   }
 }

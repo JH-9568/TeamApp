@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 try:
     import httpx
-except ImportError:  # pragma: no cover
-    httpx = None  # type: ignore
+except ImportError:
+    httpx = cast(Any, None)
 
 try:
     from langchain_core.prompts import ChatPromptTemplate
@@ -15,7 +15,7 @@ try:
     from langchain_openai import ChatOpenAI
 
     LANGCHAIN_AVAILABLE = True
-except ImportError:  # pragma: no cover
+except ImportError:
     LANGCHAIN_AVAILABLE = False
 
 from ..config import AI_PREFERRED_MODEL, GEMINI_API_KEY, OPENAI_API_KEY
@@ -24,7 +24,7 @@ TranscriptPayload = List[dict[str, str]]
 
 
 class LLMNotConfiguredError(RuntimeError):
-    """Raised when no LLM provider credentials are available."""
+    ...
 
 
 class LLMService:

@@ -50,7 +50,7 @@ async def _handle_chunk(meeting_id: uuid.UUID, payload: dict[str, Any]) -> None:
         return
 
     stt_service = get_whisper_service()
-    text = await stt_service.transcribe_base64(chunk_base64)
+    text = await stt_service.transcribe_base64(meeting_id, chunk_base64)
     if not text:
         logger.info("No transcription produced for meeting %s", meeting_id)
         return
@@ -104,7 +104,7 @@ async def _drain_queue(redis, key: str, meeting_id: uuid.UUID) -> bool:
         except WhisperNotAvailableError as exc:
             logger.error("Whisper dependency missing: %s", exc)
             raise
-        except Exception as exc:  # pragma: no cover
+        except Exception as exc:
             logger.exception("Failed to process audio chunk: %s", exc)
     return consumed
 

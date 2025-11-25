@@ -93,14 +93,6 @@ async def meeting_ws(websocket: WebSocket, meeting_id: UUID) -> None:
                     ),
                 )
 
-                transcript_stub = {
-                    "id": str(uuid.uuid4()),
-                    "speaker": payload.get("speaker") or user.name,
-                    "text": payload.get("preview") or "Processing audio chunk...",
-                    "timestamp": payload.get("timestamp") or "00:00:00",
-                }
-                await redis.publish(channel, serialize_message("transcript_segment", transcript_stub))
-
                 await websocket.send_json(
                     {
                         "type": "ack",

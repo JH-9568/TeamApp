@@ -339,6 +339,6 @@ class MeetingController extends StateNotifier<MeetingState> {
       sum += sample * sample;
     }
     final rms = sqrt(sum / sampleCount);
-    return rms < 800;
+    return rms < 1800;
   }
 }

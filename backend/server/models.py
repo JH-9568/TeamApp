@@ -96,7 +96,7 @@ class Transcript(Base):
     meeting_id = Column(UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False)
     speaker = Column(String(100), nullable=False)
     text = Column(Text, nullable=False)
-    timestamp = Column(String(20), nullable=False)
+    timestamp = Column(String(64), nullable=False)
     start_time = Column(Float, nullable=True)
     end_time = Column(Float, nullable=True)
     created_at = Column(DateTime, default=utcnow)
@@ -147,7 +147,7 @@ class SpeakerStatistic(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id = Column(UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False)
     speaker = Column(String(100), nullable=False)
-    speak_time = Column(Integer, nullable=False)  # seconds
+    speak_time = Column(Integer, nullable=False)
     speak_count = Column(Integer, nullable=False)
     participation_rate = Column(Float, nullable=True)
     avg_length = Column(Float, nullable=True)

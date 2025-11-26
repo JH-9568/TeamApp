@@ -17,4 +17,8 @@ class TeamRepository {
   Future<Team> joinTeam(String inviteCode) {
     return _api.joinTeam(inviteCode);
   }
+
+  Future<Team> updateTeam(String teamId, String name) {
+    return _api.updateTeam(teamId, name: name);
+  }
 }

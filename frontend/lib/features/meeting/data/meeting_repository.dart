@@ -31,6 +31,24 @@ class MeetingRepository {
     return _api.createActionItem(meetingId, input);
   }
 
+  Future<MeetingActionItem> updateActionItem(
+    String actionItemId, {
+    String? status,
+    String? assignee,
+    String? content,
+  }) {
+    return _api.updateActionItem(
+      actionItemId,
+      status: status,
+      assignee: assignee,
+      content: content,
+    );
+  }
+
+  Future<void> deleteActionItem(String actionItemId) {
+    return _api.deleteActionItem(actionItemId);
+  }
+
   Future<void> endMeeting(String meetingId) {
     return _api.endMeeting(meetingId);
   }
@@ -63,5 +81,17 @@ class MeetingRepository {
       text: text,
       timestamp: timestamp,
     );
+  }
+
+  Future<List<TranscriptSegment>> fetchTranscript(String meetingId) {
+    return _api.fetchTranscript(meetingId);
+  }
+
+  Future<RecordingUploadInfo> requestRecordingUpload(String meetingId) {
+    return _api.requestRecordingUpload(meetingId);
+  }
+
+  Future<void> saveSpeakerStats(String meetingId, List<SpeakerStat> stats) {
+    return _api.saveSpeakerStats(meetingId, stats);
   }
 }

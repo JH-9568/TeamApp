@@ -124,7 +124,11 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen> {
     final aspectRatio = maxWidth < 900 ? 2.1 : 2.5;
     final cards = [
       ...state.teams.map(
-        (team) => _TeamCard(team: team, onTap: () => _handleTeamSelected(team)),
+        (team) => _TeamCard(
+          team: team,
+          onTap: () => _handleTeamSelected(team),
+          onEdit: () => _handleRenameTeam(team),
+        ),
       ),
       _ActionCard(
         icon: Icons.add,
@@ -193,8 +197,22 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen> {
     context.go(AppRoute.dashboard.path);
   }
 
-  Future<String?> _showCreateTeamDialog() {
-    final controller = TextEditingController();
+  Future<void> _handleRenameTeam(Team team) async {
+    final newName = await _showCreateTeamDialog(initialValue: team.name);
+    if (newName == null || newName == team.name) return;
+    try {
+      await ref
+          .read(teamSelectionControllerProvider.notifier)
+          .updateTeamName(team.id, newName);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('팀 이름을 수정했습니다.')),
+      );
+    } catch (_) {}
+  }
+
+  Future<String?> _showCreateTeamDialog({String? initialValue}) {
+    final controller = TextEditingController(text: initialValue);
     final formKey = GlobalKey<FormState>();
     return showDialog<String>(
       context: context,
@@ -387,10 +405,11 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen> {
 }
 
 class _TeamCard extends StatelessWidget {
-  const _TeamCard({required this.team, required this.onTap});
+  const _TeamCard({required this.team, required this.onTap, this.onEdit});
 
   final Team team;
   final VoidCallback onTap;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -465,17 +484,27 @@ class _TeamCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          ElevatedButton(
-            onPressed: onTap,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF111827),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          Row(
+            children: [
+              IconButton(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit, size: 18),
+                tooltip: '팀 이름 수정',
               ),
-            ),
-            child: const Text('바로가기'),
+              ElevatedButton(
+                onPressed: onTap,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF111827),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('바로가기'),
+              ),
+            ],
           ),
         ],
       ),

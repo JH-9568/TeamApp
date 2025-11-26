@@ -48,4 +48,15 @@ class DashboardRepository {
   }) {
     return _api.createMeeting(teamId: teamId, title: title);
   }
+
+  Future<DashboardActionItem> updateActionItemStatus(
+    String actionItemId,
+    String status,
+  ) {
+    return _api.updateActionItemStatus(actionItemId, status);
+  }
+
+  Future<void> deleteActionItem(String actionItemId) {
+    return _api.deleteActionItem(actionItemId);
+  }
 }

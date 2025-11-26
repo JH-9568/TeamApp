@@ -144,6 +144,35 @@ class TeamSelectionController extends StateNotifier<TeamSelectionState> {
     }
   }
 
+  Future<void> updateTeamName(String teamId, String name) async {
+    try {
+      final updated = await _repository.updateTeam(teamId, name);
+      final teams = state.teams
+          .map((team) => team.id == updated.id ? updated : team)
+          .toList();
+      final selected = state.selectedTeam?.id == updated.id
+          ? updated
+          : state.selectedTeam;
+      state = state.copyWith(teams: teams, selectedTeam: selected);
+    } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[TeamSelectionController] updateTeam unauthorized: ${error.message}',
+      );
+      final refreshed = await _handleUnauthorized();
+      if (refreshed) {
+        return updateTeamName(teamId, name);
+      }
+      state = state.copyWith(errorMessage: error.message);
+      rethrow;
+    } on http.ClientException catch (error) {
+      state = state.copyWith(errorMessage: error.message);
+      rethrow;
+    } catch (error) {
+      state = state.copyWith(errorMessage: error.toString());
+      rethrow;
+    }
+  }
+
   void selectTeam(Team team) {
     state = state.copyWith(selectedTeam: team);
   }

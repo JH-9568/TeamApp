@@ -118,6 +118,40 @@ class MeetingApi {
     return MeetingActionItem.fromJson(body);
   }
 
+  Future<MeetingActionItem> updateActionItem(
+    String actionItemId, {
+    String? status,
+    String? assignee,
+    String? content,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (status != null) payload['status'] = status;
+    if (assignee != null) payload['assignee'] = assignee;
+    if (content != null) payload['content'] = content;
+    final response = await http.patch(
+      _uri('/api/action-items/$actionItemId'),
+      headers: _headers,
+      body: jsonEncode(payload),
+    );
+    debugPrint(
+      '[MeetingApi] PATCH /api/action-items/$actionItemId -> ${response.statusCode}',
+    );
+    _throwOnError(response);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return MeetingActionItem.fromJson(body);
+  }
+
+  Future<void> deleteActionItem(String actionItemId) async {
+    final response = await http.delete(
+      _uri('/api/action-items/$actionItemId'),
+      headers: _headers,
+    );
+    debugPrint(
+      '[MeetingApi] DELETE /api/action-items/$actionItemId -> ${response.statusCode}',
+    );
+    _throwOnError(response);
+  }
+
   Future<void> endMeeting(String meetingId) async {
     final response = await http.patch(
       _uri('/api/meetings/$meetingId'),
@@ -193,6 +227,51 @@ class MeetingApi {
     return TranscriptSegment.fromJson(
       body['transcript'] as Map<String, dynamic>,
     );
+  }
+
+  Future<List<TranscriptSegment>> fetchTranscript(String meetingId) async {
+    final response = await http.get(
+      _uri('/api/meetings/$meetingId/transcript'),
+      headers: _headers,
+    );
+    debugPrint(
+      '[MeetingApi] GET /api/meetings/$meetingId/transcript -> ${response.statusCode}',
+    );
+    _throwOnError(response);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = body['transcript'] as List<dynamic>? ?? [];
+    return items
+        .map((item) => TranscriptSegment.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<RecordingUploadInfo> requestRecordingUpload(String meetingId) async {
+    final response = await http.post(
+      _uri('/api/meetings/$meetingId/recording'),
+      headers: _headers,
+    );
+    debugPrint(
+      '[MeetingApi] POST /api/meetings/$meetingId/recording -> ${response.statusCode}',
+    );
+    _throwOnError(response);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return RecordingUploadInfo.fromJson(body);
+  }
+
+  Future<void> saveSpeakerStats(
+    String meetingId,
+    List<SpeakerStat> stats,
+  ) async {
+    final payload = stats.map((item) => item.toJson()).toList();
+    final response = await http.post(
+      _uri('/api/meetings/$meetingId/speaker-stats'),
+      headers: _headers,
+      body: jsonEncode(payload),
+    );
+    debugPrint(
+      '[MeetingApi] POST /api/meetings/$meetingId/speaker-stats -> ${response.statusCode}',
+    );
+    _throwOnError(response);
   }
 
   void _throwOnError(http.Response response) {

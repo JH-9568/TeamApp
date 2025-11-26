@@ -164,6 +164,16 @@ class SpeakerStat {
       avgLength: (json['avgLength'] as num?)?.toDouble(),
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'speaker': speaker,
+      'speak_time': speakTime,
+      'speak_count': speakCount,
+      if (participationRate != null) 'participation_rate': participationRate,
+      if (avgLength != null) 'avg_length': avgLength,
+    };
+  }
 }
 
 class MeetingAttendee {
@@ -187,6 +197,27 @@ class MeetingAttendee {
       userId: json['userId']?.toString(),
       guestName: json['guestName'] as String?,
       joinedAt: json['joinedAt']?.toString(),
+    );
+  }
+}
+
+class RecordingUploadInfo {
+  const RecordingUploadInfo({
+    required this.uploadUrl,
+    required this.recordingUrl,
+    required this.expiresAt,
+  });
+
+  final String uploadUrl;
+  final String recordingUrl;
+  final DateTime expiresAt;
+
+  factory RecordingUploadInfo.fromJson(Map<String, dynamic> json) {
+    return RecordingUploadInfo(
+      uploadUrl: json['uploadUrl'] as String? ?? '',
+      recordingUrl: json['recordingUrl'] as String? ?? '',
+      expiresAt: DateTime.tryParse(json['expiresAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }

@@ -1,9 +1,5 @@
-import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:record/record.dart';
 
 import 'package:frontend/features/auth/providers.dart';
 
@@ -25,18 +21,13 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
   final _actionContentController = TextEditingController();
   final _actionAssigneeController = TextEditingController();
   final _transcriptController = TextEditingController();
-  final AudioRecorder _recorder = AudioRecorder();
-  StreamSubscription<Uint8List>? _micSubscription;
-  String _actionType = '할일';
-  bool _isRecording = false;
+  String _actionType = '할 일';
 
   @override
   void dispose() {
     _actionContentController.dispose();
     _actionAssigneeController.dispose();
     _transcriptController.dispose();
-    _micSubscription?.cancel();
-    unawaited(_recorder.dispose());
     super.dispose();
   }
 
@@ -88,6 +79,16 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
               isRecording: meeting?.status == 'in-progress',
               onEndMeeting: controller.endMeeting,
               onRefresh: controller.refresh,
+              onRequestRecordingUpload: () async {
+                final info = await controller.requestRecordingUpload();
+                if (!context.mounted || info == null) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('업로드 URL 생성: ${info.uploadUrl}'),
+                    duration: const Duration(seconds: 4),
+                  ),
+                );
+              },
             ),
             Expanded(
               child: isLoading
@@ -197,18 +198,20 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
           isConnected: state.isConnected,
           transcriptController: _transcriptController,
           isSubmitting: state.isSubmittingTranscript,
-          isRecording: _isRecording,
-          onToggleRecording: () => _toggleRecording(controller),
           onSubmitTranscript: (text) async {
             await controller.submitTranscript(text);
             _transcriptController.clear();
           },
+          onPing: controller.sendPing,
         );
       case 1:
         return AiSummaryTab(
           summary: state.meeting?.summary,
           isLoading: state.isSummaryLoading,
           onRegenerate: controller.requestSummary,
+          onRealtimeRequest: state.isConnected
+              ? (prompt) => controller.requestSummaryOverSocket(prompt)
+              : null,
         );
       case 2:
         return ActionItemTab(
@@ -240,48 +243,19 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
             _actionContentController.clear();
           },
           onGenerate: controller.extractActionItems,
+          onComplete: (itemId) =>
+              controller.updateActionItemStatus(itemId, 'done'),
+          onReopen: (itemId) =>
+              controller.updateActionItemStatus(itemId, 'pending'),
+          onDelete: controller.deleteActionItem,
         );
       case 3:
-        return ParticipationTab(stats: state.speakerStats);
+        return ParticipationTab(
+          stats: state.speakerStats,
+          onSave: controller.saveSpeakerStats,
+        );
       default:
         return const SizedBox.shrink();
-    }
-  }
-
-  Future<void> _toggleRecording(MeetingController controller) async {
-    if (_isRecording) {
-      await _stopRecording();
-      return;
-    }
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('마이크 권한을 허용해주세요.')),
-        );
-      }
-      return;
-    }
-    final stream = await _recorder.startStream(
-      RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 16000,
-        numChannels: 1,
-      ),
-    );
-    setState(() => _isRecording = true);
-    _micSubscription = stream.listen(
-      (chunk) => controller.sendAudioChunk(Uint8List.fromList(chunk)),
-      onError: (error) => debugPrint('Recorder error: $error'),
-    );
-  }
-
-  Future<void> _stopRecording() async {
-    await _micSubscription?.cancel();
-    _micSubscription = null;
-    await _recorder.stop();
-    if (mounted) {
-      setState(() => _isRecording = false);
     }
   }
 }
@@ -295,6 +269,7 @@ class MeetingTopBar extends StatelessWidget {
     required this.isRecording,
     required this.onEndMeeting,
     required this.onRefresh,
+    required this.onRequestRecordingUpload,
   });
 
   final String meetingTitle;
@@ -303,6 +278,8 @@ class MeetingTopBar extends StatelessWidget {
   final bool isRecording;
   final VoidCallback onEndMeeting;
   final VoidCallback onRefresh;
+  // Request presigned upload URL for recording
+  final VoidCallback onRequestRecordingUpload;
 
   @override
   Widget build(BuildContext context) {
@@ -367,6 +344,11 @@ class MeetingTopBar extends StatelessWidget {
           IconButton(
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh, color: Colors.white70),
+          ),
+          IconButton(
+            onPressed: onRequestRecordingUpload,
+            icon: const Icon(Icons.cloud_upload_outlined, color: Colors.white70),
+            tooltip: '녹음 업로드 URL 요청',
           ),
           const SizedBox(width: 12),
           ElevatedButton.icon(
@@ -619,18 +601,16 @@ class SubtitlesTab extends StatelessWidget {
     required this.isConnected,
     required this.transcriptController,
     required this.isSubmitting,
-    required this.isRecording,
-    required this.onToggleRecording,
     required this.onSubmitTranscript,
+    this.onPing,
   });
 
   final List<TranscriptSegment> transcripts;
   final bool isConnected;
   final TextEditingController transcriptController;
   final bool isSubmitting;
-  final bool isRecording;
-  final VoidCallback onToggleRecording;
   final Future<void> Function(String text) onSubmitTranscript;
+  final VoidCallback? onPing;
 
   @override
   Widget build(BuildContext context) {
@@ -656,6 +636,16 @@ class SubtitlesTab extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const Spacer(),
+              if (onPing != null)
+                TextButton.icon(
+                  onPressed: onPing,
+                  icon: const Icon(Icons.wifi_tethering_outlined, size: 14),
+                  label: const Text(
+                    '핑',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
             ],
           ),
         ),
@@ -737,30 +727,6 @@ class SubtitlesTab extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: isConnected ? onToggleRecording : null,
-                    icon: Icon(isRecording ? Icons.stop : Icons.mic),
-                    label: Text(isRecording ? '녹음 중지' : '음성 전송 시작'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          isRecording ? const Color(0xFFDC2626) : const Color(0xFF3B82F6),
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      isRecording
-                          ? '마이크 입력을 실시간으로 전송 중입니다.'
-                          : '버튼을 눌러 음성을 전송하거나 아래 입력창을 사용하세요.',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
                   Expanded(
                     child: TextField(
                       controller: transcriptController,
@@ -836,11 +802,13 @@ class AiSummaryTab extends StatelessWidget {
     required this.summary,
     required this.isLoading,
     required this.onRegenerate,
+    this.onRealtimeRequest,
   });
 
   final String? summary;
   final bool isLoading;
   final VoidCallback onRegenerate;
+  final void Function(String prompt)? onRealtimeRequest;
 
   @override
   Widget build(BuildContext context) {
@@ -951,6 +919,18 @@ class AiSummaryTab extends StatelessWidget {
               ),
             ),
           ),
+          if (onRealtimeRequest != null) ...[
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => onRealtimeRequest?.call('요약을 요청합니다.'),
+              icon: const Icon(Icons.wifi_tethering),
+              label: const Text('웹소켓으로 요약 요청'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0EA5E9),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -997,6 +977,9 @@ class ActionItemTab extends StatelessWidget {
     required this.onTypeChanged,
     required this.onSubmit,
     required this.onGenerate,
+    required this.onComplete,
+    required this.onReopen,
+    required this.onDelete,
   });
 
   final List<MeetingActionItem> items;
@@ -1008,6 +991,9 @@ class ActionItemTab extends StatelessWidget {
   final ValueChanged<String> onTypeChanged;
   final VoidCallback onSubmit;
   final VoidCallback onGenerate;
+  final void Function(String id) onComplete;
+  final void Function(String id) onReopen;
+  final void Function(String id) onDelete;
 
   static const _types = ['할일', '논의', 'Shared'];
 
@@ -1069,6 +1055,40 @@ class ActionItemTab extends StatelessWidget {
                             '담당자: ${item.assignee}',
                             style:
                                 const TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () => onDelete(item.id),
+                                child: const Text(
+                                  '삭제',
+                                  style: TextStyle(color: Colors.redAccent),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: item.status.toLowerCase() == 'done'
+                                    ? () => onReopen(item.id)
+                                    : () => onComplete(item.id),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: item.status.toLowerCase() == 'done'
+                                      ? const Color(0xFF6366F1)
+                                      : const Color(0xFF22C55E),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                ),
+                                child: Text(
+                                  item.status.toLowerCase() == 'done'
+                                      ? '다시 진행'
+                                      : '완료',
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1188,9 +1208,10 @@ class ActionItemTab extends StatelessWidget {
 }
 
 class ParticipationTab extends StatelessWidget {
-  const ParticipationTab({super.key, required this.stats});
+  const ParticipationTab({super.key, required this.stats, this.onSave});
 
   final List<SpeakerStat> stats;
+  final Future<void> Function()? onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -1208,6 +1229,20 @@ class ParticipationTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
+          if (onSave != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                onPressed: onSave,
+                icon: const Icon(Icons.save_alt),
+                label: const Text('서버에 저장'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF22C55E),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
           if (stats.isEmpty)
             const Expanded(
               child: Center(

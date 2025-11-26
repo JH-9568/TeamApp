@@ -117,6 +117,33 @@ class DashboardScreen extends ConsumerWidget {
                                                       data,
                                                       teamId,
                                                     ),
+                                                onComplete: (id) => ref
+                                                    .read(
+                                                      dashboardControllerProvider(
+                                                        teamId,
+                                                      ).notifier,
+                                                    )
+                                                    .updateActionItemStatus(
+                                                      id,
+                                                      'done',
+                                                    ),
+                                                onReopen: (id) => ref
+                                                    .read(
+                                                      dashboardControllerProvider(
+                                                        teamId,
+                                                      ).notifier,
+                                                    )
+                                                    .updateActionItemStatus(
+                                                      id,
+                                                      'pending',
+                                                    ),
+                                                onDelete: (id) => ref
+                                                    .read(
+                                                      dashboardControllerProvider(
+                                                        teamId,
+                                                      ).notifier,
+                                                    )
+                                                    .deleteActionItem(id),
                                               ),
                                               const SizedBox(height: 24),
                                               _RightPanelSection(
@@ -144,6 +171,33 @@ class DashboardScreen extends ConsumerWidget {
                                                       data,
                                                       teamId,
                                                     ),
+                                                onComplete: (id) => ref
+                                                    .read(
+                                                      dashboardControllerProvider(
+                                                        teamId,
+                                                      ).notifier,
+                                                    )
+                                                    .updateActionItemStatus(
+                                                      id,
+                                                      'done',
+                                                    ),
+                                                onReopen: (id) => ref
+                                                    .read(
+                                                      dashboardControllerProvider(
+                                                        teamId,
+                                                      ).notifier,
+                                                    )
+                                                    .updateActionItemStatus(
+                                                      id,
+                                                      'pending',
+                                                    ),
+                                                onDelete: (id) => ref
+                                                    .read(
+                                                      dashboardControllerProvider(
+                                                        teamId,
+                                                      ).notifier,
+                                                    )
+                                                    .deleteActionItem(id),
                                               ),
                                             ),
                                             const SizedBox(width: 24),
@@ -1003,11 +1057,17 @@ class _ActionItemsSection extends StatelessWidget {
     required this.items,
     required this.isCreating,
     this.onRequestAdd,
+    this.onComplete,
+    this.onReopen,
+    this.onDelete,
   });
 
   final List<DashboardActionItem> items;
   final bool isCreating;
   final VoidCallback? onRequestAdd;
+  final void Function(String id)? onComplete;
+  final void Function(String id)? onReopen;
+  final void Function(String id)? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1127,7 +1187,12 @@ class _ActionItemsSection extends StatelessWidget {
           ...sortedItems.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: _ActionItemCard(item: item),
+              child: _ActionItemCard(
+                item: item,
+                onComplete: onComplete,
+                onReopen: onReopen,
+                onDelete: onDelete,
+              ),
             ),
           ),
       ],
@@ -1136,9 +1201,17 @@ class _ActionItemsSection extends StatelessWidget {
 }
 
 class _ActionItemCard extends StatelessWidget {
-  const _ActionItemCard({required this.item});
+  const _ActionItemCard({
+    required this.item,
+    this.onComplete,
+    this.onReopen,
+    this.onDelete,
+  });
 
   final DashboardActionItem item;
+  final void Function(String id)? onComplete;
+  final void Function(String id)? onReopen;
+  final void Function(String id)? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1216,6 +1289,37 @@ class _ActionItemCard extends StatelessWidget {
                           _Tag(label: meetingLabel, icon: Icons.video_call),
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed:
+                              onDelete == null ? null : () => onDelete!(item.id),
+                          child: const Text(
+                            '삭제',
+                            style: TextStyle(color: Colors.redAccent),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (isDone) {
+                              onReopen?.call(item.id);
+                            } else {
+                              onComplete?.call(item.id);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isDone
+                                ? const Color(0xFF6366F1)
+                                : const Color(0xFF22C55E),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Text(isDone ? '다시 진행' : '완료'),
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -87,6 +87,19 @@ class TeamApi {
     return Team.fromJson(teamJson);
   }
 
+  Future<Team> updateTeam(String teamId, {required String name}) async {
+    final response = await http.patch(
+      _uri('/api/teams/$teamId'),
+      headers: _headers,
+      body: jsonEncode({'name': name.trim()}),
+    );
+    debugPrint('[TeamApi] PATCH /api/teams/$teamId -> ${response.statusCode}');
+    _throwOnError(response);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final teamJson = body['team'] as Map<String, dynamic>;
+    return Team.fromJson(teamJson);
+  }
+
   void _throwOnError(http.Response response) {
     if (response.statusCode == 401) {
       throw const UnauthorizedException();

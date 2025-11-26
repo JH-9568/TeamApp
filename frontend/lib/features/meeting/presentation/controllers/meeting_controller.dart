@@ -100,9 +100,11 @@ class MeetingController extends StateNotifier<MeetingState> {
     try {
       final meeting = await _repository.fetchMeeting(meetingId);
       final attendees = await _repository.fetchAttendees(meetingId);
+      final transcript = await _repository.fetchTranscript(meetingId);
+      final mergedMeeting = meeting.copyWith(transcripts: transcript);
       state = state.copyWith(
         isLoading: false,
-        meeting: meeting,
+        meeting: mergedMeeting,
         attendees: attendees,
         errorMessage: null,
       );
@@ -171,6 +173,34 @@ class MeetingController extends StateNotifier<MeetingState> {
       state = state.copyWith(errorMessage: error.toString());
     } finally {
       state = state.copyWith(isSubmittingAction: false);
+    }
+  }
+
+  Future<void> updateActionItemStatus(String actionItemId, String status) async {
+    try {
+      final updated = await _repository.updateActionItem(
+        actionItemId,
+        status: status,
+      );
+      final items = state.actionItems.map((item) {
+        return item.id == actionItemId ? updated : item;
+      }).toList();
+      _updateMeeting(state.meeting?.copyWith(actionItems: items));
+    } catch (error, stack) {
+      debugPrint('Failed to update action item: $error\n$stack');
+      state = state.copyWith(errorMessage: error.toString());
+    }
+  }
+
+  Future<void> deleteActionItem(String actionItemId) async {
+    try {
+      await _repository.deleteActionItem(actionItemId);
+      final items =
+          state.actionItems.where((item) => item.id != actionItemId).toList();
+      _updateMeeting(state.meeting?.copyWith(actionItems: items));
+    } catch (error, stack) {
+      debugPrint('Failed to delete action item: $error\n$stack');
+      state = state.copyWith(errorMessage: error.toString());
     }
   }
 
@@ -322,6 +352,50 @@ class MeetingController extends StateNotifier<MeetingState> {
     _subscription?.cancel();
     _channel?.sink.close();
     super.dispose();
+  }
+
+  Future<void> saveSpeakerStats() async {
+    final stats = state.speakerStats;
+    if (stats.isEmpty) return;
+    try {
+      await _repository.saveSpeakerStats(meetingId, stats);
+    } catch (error, stack) {
+      debugPrint('Failed to save speaker stats: $error\n$stack');
+      state = state.copyWith(errorMessage: error.toString());
+    }
+  }
+
+  Future<RecordingUploadInfo?> requestRecordingUpload() async {
+    try {
+      final info = await _repository.requestRecordingUpload(meetingId);
+      return info;
+    } catch (error, stack) {
+      debugPrint('Failed to request recording upload: $error\n$stack');
+      state = state.copyWith(errorMessage: error.toString());
+      return null;
+    }
+  }
+
+  void sendPing() {
+    final channel = _channel;
+    if (channel == null) return;
+    try {
+      channel.sink.add(jsonEncode({'type': 'ping'}));
+    } catch (error, stack) {
+      debugPrint('Failed to send ping: $error\n$stack');
+    }
+  }
+
+  void requestSummaryOverSocket(String prompt) {
+    final channel = _channel;
+    if (channel == null) return;
+    try {
+      channel.sink.add(
+        jsonEncode({'type': 'summary_request', 'data': {'prompt': prompt}}),
+      );
+    } catch (error, stack) {
+      debugPrint('Failed to send summary request: $error\n$stack');
+    }
   }
 
   bool _isSilent(Uint8List data) {

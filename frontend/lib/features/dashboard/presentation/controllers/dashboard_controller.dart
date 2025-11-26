@@ -178,4 +178,69 @@ class DashboardController extends StateNotifier<DashboardState> {
       rethrow;
     }
   }
+
+  Future<void> updateActionItemStatus(
+    String actionItemId,
+    String status,
+  ) async {
+    final current = state.data;
+    if (current == null) return;
+    try {
+      final updated = await _repository.updateActionItemStatus(
+        actionItemId,
+        status,
+      );
+      final items = current.actionItems.map((item) {
+        return item.id == actionItemId ? updated : item;
+      }).toList();
+      state = state.copyWith(
+        data: DashboardData(
+          team: current.team,
+          actionItems: items,
+          meetings: current.meetings,
+        ),
+      );
+    } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[DashboardController] updateActionItemStatus unauthorized: ${error.message}',
+      );
+      final refreshed = await _onUnauthorized();
+      if (refreshed) {
+        return updateActionItemStatus(actionItemId, status);
+      }
+      state = state.copyWith(errorMessage: error.message);
+    } catch (error, stack) {
+      debugPrint('Failed to update action item status: $error\n$stack');
+      state = state.copyWith(errorMessage: error.toString());
+    }
+  }
+
+  Future<void> deleteActionItem(String actionItemId) async {
+    final current = state.data;
+    if (current == null) return;
+    try {
+      await _repository.deleteActionItem(actionItemId);
+      final items =
+          current.actionItems.where((item) => item.id != actionItemId).toList();
+      state = state.copyWith(
+        data: DashboardData(
+          team: current.team,
+          actionItems: items,
+          meetings: current.meetings,
+        ),
+      );
+    } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[DashboardController] deleteActionItem unauthorized: ${error.message}',
+      );
+      final refreshed = await _onUnauthorized();
+      if (refreshed) {
+        return deleteActionItem(actionItemId);
+      }
+      state = state.copyWith(errorMessage: error.message);
+    } catch (error, stack) {
+      debugPrint('Failed to delete action item: $error\n$stack');
+      state = state.copyWith(errorMessage: error.toString());
+    }
+  }
 }

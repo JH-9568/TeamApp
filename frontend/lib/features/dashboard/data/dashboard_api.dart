@@ -145,6 +145,34 @@ class DashboardApi {
     return DashboardMeeting.fromJson(meetingJson);
   }
 
+  Future<DashboardActionItem> updateActionItemStatus(
+    String actionItemId,
+    String status,
+  ) async {
+    final response = await http.patch(
+      _uri('/api/action-items/$actionItemId'),
+      headers: _headers,
+      body: jsonEncode({'status': status}),
+    );
+    debugPrint(
+      '[DashboardApi] PATCH /api/action-items/$actionItemId -> ${response.statusCode}',
+    );
+    _throwOnError(response);
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return DashboardActionItem.fromJson(json);
+  }
+
+  Future<void> deleteActionItem(String actionItemId) async {
+    final response = await http.delete(
+      _uri('/api/action-items/$actionItemId'),
+      headers: _headers,
+    );
+    debugPrint(
+      '[DashboardApi] DELETE /api/action-items/$actionItemId -> ${response.statusCode}',
+    );
+    _throwOnError(response);
+  }
+
   void _throwOnError(http.Response response) {
     if (response.statusCode == 401) {
       throw const UnauthorizedException();

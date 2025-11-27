@@ -74,8 +74,7 @@ class MeetingController extends StateNotifier<MeetingState> {
     this.meetingId, {
     required this.userId,
     required this.userName,
-  })
-    : super(const MeetingState());
+  }) : super(const MeetingState());
 
   final MeetingRepository _repository;
   final String meetingId;
@@ -110,10 +109,7 @@ class MeetingController extends StateNotifier<MeetingState> {
       );
     } catch (error, stack) {
       debugPrint('Failed to load meeting: $error\n$stack');
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
     }
   }
 
@@ -122,9 +118,7 @@ class MeetingController extends StateNotifier<MeetingState> {
   Future<void> requestSummary() async {
     if (state.isSummaryLoading) return;
     if (state.transcripts.isEmpty) {
-      state = state.copyWith(
-        errorMessage: '실시간 자막이 기록된 후에 요약을 생성할 수 있습니다.',
-      );
+      state = state.copyWith(errorMessage: '실시간 자막이 기록된 후에 요약을 생성할 수 있습니다.');
       return;
     }
     state = state.copyWith(isSummaryLoading: true);
@@ -176,7 +170,10 @@ class MeetingController extends StateNotifier<MeetingState> {
     }
   }
 
-  Future<void> updateActionItemStatus(String actionItemId, String status) async {
+  Future<void> updateActionItemStatus(
+    String actionItemId,
+    String status,
+  ) async {
     try {
       final updated = await _repository.updateActionItem(
         actionItemId,
@@ -195,8 +192,9 @@ class MeetingController extends StateNotifier<MeetingState> {
   Future<void> deleteActionItem(String actionItemId) async {
     try {
       await _repository.deleteActionItem(actionItemId);
-      final items =
-          state.actionItems.where((item) => item.id != actionItemId).toList();
+      final items = state.actionItems
+          .where((item) => item.id != actionItemId)
+          .toList();
       _updateMeeting(state.meeting?.copyWith(actionItems: items));
     } catch (error, stack) {
       debugPrint('Failed to delete action item: $error\n$stack');
@@ -285,22 +283,21 @@ class MeetingController extends StateNotifier<MeetingState> {
 
   void sendAudioChunk(Uint8List data) {
     final channel = _channel;
-    if (channel == null) return;
+    final meetingStatus = state.meeting?.status;
+    if (channel == null || meetingStatus != 'in-progress') return;
     try {
       if (_isSilent(data)) {
         return;
       }
       channel.sink.add(
-        jsonEncode(
-          {
-            'type': 'audio_chunk',
-            'data': {
-              'data': base64Encode(data),
-              'speaker': userName,
-              'timestamp': DateTime.now().toIso8601String(),
-            },
+        jsonEncode({
+          'type': 'audio_chunk',
+          'data': {
+            'data': base64Encode(data),
+            'speaker': userName,
+            'timestamp': DateTime.now().toIso8601String(),
           },
-        ),
+        }),
       );
     } catch (error, stack) {
       debugPrint('Failed to send audio chunk: $error\n$stack');
@@ -308,48 +305,50 @@ class MeetingController extends StateNotifier<MeetingState> {
   }
 
   void _handleSocketEvent(dynamic raw) {
-    Map<String, dynamic>? message;
-    if (raw is String) {
-      try {
-        message = jsonDecode(raw) as Map<String, dynamic>;
-      } catch (_) {
-        debugPrint('[MeetingSocket] Failed to decode JSON message');
+    try {
+      Map<String, dynamic>? message;
+      if (raw is String) {
+        message = jsonDecode(raw) as Map<String, dynamic>?;
+      } else if (raw is Map) {
+        message = Map<String, dynamic>.from(raw);
+      }
+      if (message == null) {
         return;
       }
-    } else if (raw is Map<String, dynamic>) {
-      message = raw;
-    }
-    if (message == null) {
-      return;
-    }
-    final type = message['type'] as String?;
-    final data = (message['data'] as Map<String, dynamic>?) ?? {};
-    if (type == 'ack') {
-      return;
-    }
-    debugPrint('[MeetingSocket] type=$type data=$data');
-    debugPrint('[MeetingSocket] type=$type data=$data');
-    switch (type) {
-      case 'ack':
-        // Ignore ack logs to reduce noise
+
+      final type = message['type'] as String?;
+      final data = message['data'];
+      final payload =
+          data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+
+      if (type == null || type == 'ack') {
         return;
-      case 'ready':
-        debugPrint('[MeetingSocket] READY event');
-        state = state.copyWith(isConnected: true);
-        break;
-      case 'transcript_segment':
-        final segment = TranscriptSegment.fromJson(data);
-        final transcripts = [...state.transcripts, segment];
-        _updateMeeting(state.meeting?.copyWith(transcripts: transcripts));
-        break;
-      case 'summary_update':
-        final summary = data['summary'] as String?;
-        if (summary != null) {
-          _updateMeeting(state.meeting?.copyWith(summary: summary));
-        }
-        break;
-      default:
-        break;
+      }
+
+      debugPrint('[MeetingSocket] type=$type data=$payload');
+
+      switch (type) {
+        case 'ready':
+          debugPrint('[MeetingSocket] READY event');
+          state = state.copyWith(isConnected: true);
+          break;
+        case 'transcript_segment':
+          final segment = TranscriptSegment.fromJson(payload);
+          final transcripts = [...state.transcripts, segment];
+          _updateMeeting(state.meeting?.copyWith(transcripts: transcripts));
+          break;
+        case 'summary_update':
+          final summary = payload['summary'] as String?;
+          if (summary != null) {
+            _updateMeeting(state.meeting?.copyWith(summary: summary));
+          }
+          break;
+        default:
+          debugPrint('[MeetingSocket] Ignoring unknown event type "$type"');
+          break;
+      }
+    } catch (error, stack) {
+      debugPrint('Failed to handle meeting socket event: $error\n$stack');
     }
   }
 
@@ -397,7 +396,10 @@ class MeetingController extends StateNotifier<MeetingState> {
     if (channel == null) return;
     try {
       channel.sink.add(
-        jsonEncode({'type': 'summary_request', 'data': {'prompt': prompt}}),
+        jsonEncode({
+          'type': 'summary_request',
+          'data': {'prompt': prompt},
+        }),
       );
     } catch (error, stack) {
       debugPrint('Failed to send summary request: $error\n$stack');
@@ -419,6 +421,7 @@ class MeetingController extends StateNotifier<MeetingState> {
       sum += sample * sample;
     }
     final rms = sqrt(sum / sampleCount);
-    return rms < 4000;
+    // Treat very low RMS as silence; keep threshold modest to avoid dropping speech
+    return rms < 800;
   }
 }

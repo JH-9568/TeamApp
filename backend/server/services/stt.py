@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional, cast
 
-from ..config import WHISPER_DEVICE, WHISPER_MODEL
+from ..config import STT_LANGUAGE, STT_PROVIDER, WHISPER_DEVICE, WHISPER_MODEL
 
 try:
     import whisper
@@ -18,8 +18,12 @@ except ImportError:
     np = cast(Any, None)
 
 
-class WhisperNotAvailableError(RuntimeError):
+class STTNotAvailableError(RuntimeError):
     ...
+
+
+# Backwards-compat alias for existing imports
+WhisperNotAvailableError = STTNotAvailableError
 
 
 @dataclass
@@ -81,13 +85,13 @@ class WhisperService:
         model_name: str,
         device: str = "cpu",
         sample_rate: int = 16000,
-        context_seconds: float = 3.0,
-        overlap_seconds: float = 0.7,
-        min_chunk_seconds: float = 1.2,
-        flush_silence_seconds: float = 0.5,
-        vad_rms_threshold: float = 0.01,
+        context_seconds: float = 8.0,
+        overlap_seconds: float = 2.0,
+        min_chunk_seconds: float = 1.5,
+        flush_silence_seconds: float = 0.8,
+        vad_rms_threshold: float = 0.003,
         session_ttl_seconds: float = 60.0,
-        noise_gate_floor: float = 0.001,
+        noise_gate_floor: float = 0.0002,
     ) -> None:
         self.model_name = model_name
         self.device = device
@@ -114,10 +118,10 @@ class WhisperService:
         await self._ensure_model()
         model = self._model
         if model is None:
-            raise WhisperNotAvailableError("Whisper model failed to load.")
+            raise STTNotAvailableError("Whisper model failed to load.")
 
         if np is None:
-            raise WhisperNotAvailableError("NumPy is required for Whisper transcription.")
+            raise STTNotAvailableError("NumPy is required for Whisper transcription.")
 
         audio_bytes = base64.b64decode(chunk_base64, validate=False)
         meeting_key = str(meeting_id)
@@ -165,12 +169,15 @@ class WhisperService:
                 language="ko",
                 task="transcribe",
                 condition_on_previous_text=True,
+                temperature=0.0,
+                beam_size=3,
+                best_of=1,
             ),
         )
 
         text = (result or {}).get("text", "")
         text = text.strip() if isinstance(text, str) else ""
-        incremental = session.incremental_text(text)
+        incremental = session.incremental_text(text) or text
         incremental = self._clean_text(incremental)
         session.trim(reset=is_silence)
         self._cleanup_sessions()
@@ -182,11 +189,10 @@ class WhisperService:
             return audio
         # Remove DC offset
         audio = audio - np.mean(audio)
-        # Noise gate based on median absolute amplitude
+        # Noise gate based on median absolute amplitude (soft)
         median_amp = np.median(np.abs(audio))
-        threshold = max(self.noise_gate_floor, median_amp * 1.5)
-        gated = np.where(np.abs(audio) < threshold, 0.0, audio)
-        return gated
+        threshold = max(self.noise_gate_floor, median_amp * 0.8)
+        return np.where(np.abs(audio) < threshold, 0.0, audio)
 
     async def _ensure_model(self) -> None:
         if self._model is None:
@@ -196,7 +202,7 @@ class WhisperService:
 
     async def _load_model(self):
         if whisper is None:
-            raise WhisperNotAvailableError(
+            raise STTNotAvailableError(
                 "openai-whisper is not installed. Run `pip install openai-whisper`."
             )
         loop = asyncio.get_running_loop()
@@ -216,12 +222,9 @@ class WhisperService:
         return session
 
     def _clean_text(self, text: Optional[str]) -> Optional[str]:
-        """Allow only Korean, English, numbers and basic punctuation."""
         if not text:
             return None
-        allowed = re.sub(r"[^0-9A-Za-z가-힣 .,!?~\\-]", "", text)
-        cleaned = allowed.strip()
-        return cleaned or None
+        return text.strip() or None
 
     def _cleanup_sessions(self) -> None:
         if not self._sessions:
@@ -244,3 +247,28 @@ def get_whisper_service() -> WhisperService:
     if _whisper_service is None:
         _whisper_service = WhisperService(WHISPER_MODEL, device=WHISPER_DEVICE)
     return _whisper_service
+
+
+_stt_service: Any | None = None
+
+
+def get_stt_service():
+    """Return the configured STT provider instance."""
+    global _stt_service
+    if _stt_service is not None:
+        return _stt_service
+
+    provider = (STT_PROVIDER or "whisper").lower()
+    if provider == "google":
+        try:
+            from .stt_google import GoogleSpeechService
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise STTNotAvailableError(
+                "google-cloud-speech is not installed. Run `pip install google-cloud-speech`."
+            ) from exc
+
+        _stt_service = GoogleSpeechService(language_code=STT_LANGUAGE)
+    else:
+        _stt_service = get_whisper_service()
+
+    return _stt_service

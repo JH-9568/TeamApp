@@ -31,7 +31,7 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
   DateTime? _actionDueDate;
   final _recorder = AudioRecorder();
   StreamSubscription<Uint8List>? _micSubscription;
-  bool _isMuted = false;
+  bool _isMuted = true;
   bool _isMicActive = false;
 
   @override
@@ -47,12 +47,6 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final meetingId = widget.meetingId;
-      if (meetingId != null && meetingId.isNotEmpty) {
-        _startMicStreaming(meetingId);
-      }
-    });
   }
 
   @override
@@ -71,6 +65,18 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
       previous,
       next,
     ) {
+      final prevStatus = previous?.meeting?.status;
+      final nextStatus = next.meeting?.status;
+
+      final meetingStarted = nextStatus == 'in-progress';
+      final meetingEnded = prevStatus == 'in-progress' && nextStatus != 'in-progress';
+
+      if (meetingStarted) {
+        _startMicStreaming(meetingId);
+      } else if (meetingEnded) {
+        _stopMic();
+      }
+
       if (next.errorMessage != null &&
           next.errorMessage != previous?.errorMessage) {
         ScaffoldMessenger.of(
@@ -246,6 +252,7 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
         await _recorder.stop();
       }
     } catch (_) {}
+    if (!mounted) return;
     setState(() {
       _isMicActive = false;
     });

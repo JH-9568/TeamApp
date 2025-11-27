@@ -82,6 +82,15 @@ async def meeting_ws(websocket: WebSocket, meeting_id: UUID) -> None:
             payload: dict[str, Any] = message.get("data", {}) or {}
 
             if message_type == "audio_chunk":
+                if meeting.status != "in-progress":
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "data": {"message": "Meeting is not in progress; audio ignored."},
+                        }
+                    )
+                    continue
+
                 await redis.rpush(
                     audio_key,
                     json.dumps(

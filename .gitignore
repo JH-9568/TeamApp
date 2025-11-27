@@ -19,6 +19,9 @@ instance/
 # --- macOS ---
 .DS_Store
 
+# --- Secrets / keys ---
+backend/keys/
+
 # --- Node / Flutter frontend ---
 node_modules/
 pubspec.lock

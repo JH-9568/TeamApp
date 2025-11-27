@@ -9,26 +9,12 @@ from typing import Any
 
 from ..config import STT_POLL_INTERVAL
 from ..db import AsyncSessionLocal
-from ..models import Transcript, User
+from ..models import Transcript
 from ..redis import get_redis, meeting_channel, serialize_message
 from ..services.stt import WhisperNotAvailableError, get_whisper_service
 
 logger = logging.getLogger("stt_worker")
 logging.basicConfig(level=logging.INFO)
-
-
-async def _fetch_user_name(session, user_id: str | None) -> str:
-    if not user_id:
-        return "Guest"
-    try:
-        user_uuid = uuid.UUID(user_id)
-    except ValueError:
-        return "Guest"
-
-    user = await session.get(User, user_uuid)
-    if user:
-        return user.name
-    return "Guest"
 
 
 async def _handle_chunk(meeting_id: uuid.UUID, payload: dict[str, Any]) -> None:
@@ -56,9 +42,8 @@ async def _handle_chunk(meeting_id: uuid.UUID, payload: dict[str, Any]) -> None:
         return
 
     async with AsyncSessionLocal() as session:
-        speaker = await _fetch_user_name(session, payload.get("userId"))
-        if chunk_speaker:
-            speaker = chunk_speaker
+        # Prefer client-provided speaker label; avoid falling back to raw userId UUID
+        speaker = chunk_speaker or payload.get("speaker") or "참여자"
         transcript = Transcript(
             id=uuid.uuid4(),
             meeting_id=meeting_id,

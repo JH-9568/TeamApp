@@ -308,7 +308,6 @@ class MeetingController extends StateNotifier<MeetingState> {
   }
 
   void _handleSocketEvent(dynamic raw) {
-    debugPrint('[MeetingSocket] raw message: $raw');
     Map<String, dynamic>? message;
     if (raw is String) {
       try {
@@ -325,8 +324,15 @@ class MeetingController extends StateNotifier<MeetingState> {
     }
     final type = message['type'] as String?;
     final data = (message['data'] as Map<String, dynamic>?) ?? {};
+    if (type == 'ack') {
+      return;
+    }
+    debugPrint('[MeetingSocket] type=$type data=$data');
     debugPrint('[MeetingSocket] type=$type data=$data');
     switch (type) {
+      case 'ack':
+        // Ignore ack logs to reduce noise
+        return;
       case 'ready':
         debugPrint('[MeetingSocket] READY event');
         state = state.copyWith(isConnected: true);
@@ -413,6 +419,6 @@ class MeetingController extends StateNotifier<MeetingState> {
       sum += sample * sample;
     }
     final rms = sqrt(sum / sampleCount);
-    return rms < 1800;
+    return rms < 4000;
   }
 }

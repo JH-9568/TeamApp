@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -86,6 +87,7 @@ class WhisperService:
         flush_silence_seconds: float = 0.5,
         vad_rms_threshold: float = 0.01,
         session_ttl_seconds: float = 60.0,
+        noise_gate_floor: float = 0.001,
     ) -> None:
         self.model_name = model_name
         self.device = device
@@ -96,6 +98,7 @@ class WhisperService:
         self.flush_silence_seconds = flush_silence_seconds
         self.vad_rms_threshold = vad_rms_threshold
         self.session_ttl_seconds = session_ttl_seconds
+        self.noise_gate_floor = noise_gate_floor
 
         self.max_buffer_samples = int(self.sample_rate * self.context_seconds)
         self.overlap_samples = int(self.sample_rate * self.overlap_seconds)
@@ -130,6 +133,7 @@ class WhisperService:
             return None
 
         audio = audio_samples.astype(np.float32) / 32768.0
+        audio = self._denoise(audio)
         rms = float(np.sqrt(np.mean(np.square(audio))))
         if not np.isfinite(rms):
             return None
@@ -167,9 +171,22 @@ class WhisperService:
         text = (result or {}).get("text", "")
         text = text.strip() if isinstance(text, str) else ""
         incremental = session.incremental_text(text)
+        incremental = self._clean_text(incremental)
         session.trim(reset=is_silence)
         self._cleanup_sessions()
         return incremental
+
+    def _denoise(self, audio: "np.ndarray") -> "np.ndarray":
+        """Apply a light noise gate to suppress low-level background noise."""
+        if audio.size == 0:
+            return audio
+        # Remove DC offset
+        audio = audio - np.mean(audio)
+        # Noise gate based on median absolute amplitude
+        median_amp = np.median(np.abs(audio))
+        threshold = max(self.noise_gate_floor, median_amp * 1.5)
+        gated = np.where(np.abs(audio) < threshold, 0.0, audio)
+        return gated
 
     async def _ensure_model(self) -> None:
         if self._model is None:
@@ -197,6 +214,14 @@ class WhisperService:
             )
             self._sessions[meeting_key] = session
         return session
+
+    def _clean_text(self, text: Optional[str]) -> Optional[str]:
+        """Allow only Korean, English, numbers and basic punctuation."""
+        if not text:
+            return None
+        allowed = re.sub(r"[^0-9A-Za-z가-힣 .,!?~\\-]", "", text)
+        cleaned = allowed.strip()
+        return cleaned or None
 
     def _cleanup_sessions(self) -> None:
         if not self._sessions:

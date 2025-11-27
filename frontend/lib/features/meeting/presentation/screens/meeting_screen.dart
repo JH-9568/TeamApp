@@ -1,7 +1,13 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:record/record.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:frontend/features/auth/providers.dart';
+import 'package:frontend/app/routes.dart';
 
 import '../../models/meeting_models.dart';
 import '../../providers.dart';
@@ -22,13 +28,31 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
   final _actionAssigneeController = TextEditingController();
   final _transcriptController = TextEditingController();
   String _actionType = '할 일';
+  DateTime? _actionDueDate;
+  final _recorder = AudioRecorder();
+  StreamSubscription<Uint8List>? _micSubscription;
+  bool _isMuted = false;
+  bool _isMicActive = false;
 
   @override
   void dispose() {
     _actionContentController.dispose();
     _actionAssigneeController.dispose();
     _transcriptController.dispose();
+    _stopMic();
+    _recorder.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final meetingId = widget.meetingId;
+      if (meetingId != null && meetingId.isNotEmpty) {
+        _startMicStreaming(meetingId);
+      }
+    });
   }
 
   @override
@@ -38,28 +62,23 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
       return Scaffold(
         backgroundColor: const Color(0xFF0F172A),
         body: const Center(
-          child: Text(
-            '회의 정보가 없습니다.',
-            style: TextStyle(color: Colors.white),
-          ),
+          child: Text('회의 정보가 없습니다.', style: TextStyle(color: Colors.white)),
         ),
       );
     }
 
-    ref.listen<MeetingState>(
-      meetingControllerProvider(meetingId),
-      (previous, next) {
-        if (next.errorMessage != null &&
-            next.errorMessage != previous?.errorMessage) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(next.errorMessage!)),
-          );
-          ref
-              .read(meetingControllerProvider(meetingId).notifier)
-              .clearError();
-        }
-      },
-    );
+    ref.listen<MeetingState>(meetingControllerProvider(meetingId), (
+      previous,
+      next,
+    ) {
+      if (next.errorMessage != null &&
+          next.errorMessage != previous?.errorMessage) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(next.errorMessage!)));
+        ref.read(meetingControllerProvider(meetingId).notifier).clearError();
+      }
+    });
 
     final state = ref.watch(meetingControllerProvider(meetingId));
     final controller = ref.read(meetingControllerProvider(meetingId).notifier);
@@ -77,7 +96,12 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
               timerLabel: _timerLabel(meeting),
               status: meeting?.status ?? 'scheduled',
               isRecording: meeting?.status == 'in-progress',
-              onEndMeeting: controller.endMeeting,
+              onEndMeeting: () async {
+                await controller.endMeeting();
+                await _stopMic();
+                if (!mounted) return;
+                context.go(AppRoute.dashboard.path);
+              },
               onRefresh: controller.refresh,
               onRequestRecordingUpload: () async {
                 final info = await controller.requestRecordingUpload();
@@ -89,6 +113,8 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
                   ),
                 );
               },
+              isMuted: _isMuted,
+              onToggleMute: _toggleMute,
             ),
             Expanded(
               child: isLoading
@@ -112,9 +138,8 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
                               children: [
                                 MeetingTabs(
                                   currentIndex: _currentTabIndex,
-                                  onTabChanged: (index) => setState(
-                                    () => _currentTabIndex = index,
-                                  ),
+                                  onTabChanged: (index) =>
+                                      setState(() => _currentTabIndex = index),
                                 ),
                                 Expanded(
                                   child: Container(
@@ -169,6 +194,63 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
     );
   }
 
+  Future<void> _startMicStreaming(String meetingId) async {
+    if (_isMicActive) return;
+    try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('마이크 권한이 필요합니다.')));
+        }
+        return;
+      }
+      final stream = await _recorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+      );
+      _micSubscription = stream.listen((data) {
+        if (_isMuted) return;
+        ref
+            .read(meetingControllerProvider(meetingId).notifier)
+            .sendAudioChunk(data);
+      });
+      setState(() {
+        _isMicActive = true;
+      });
+    } catch (error) {
+      debugPrint('Failed to start mic streaming: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('마이크 시작에 실패했습니다.')));
+      }
+    }
+  }
+
+  void _toggleMute() {
+    setState(() {
+      _isMuted = !_isMuted;
+    });
+  }
+
+  Future<void> _stopMic() async {
+    try {
+      await _micSubscription?.cancel();
+      _micSubscription = null;
+      if (_isMicActive) {
+        await _recorder.stop();
+      }
+    } catch (_) {}
+    setState(() {
+      _isMicActive = false;
+    });
+  }
+
   String _timerLabel(MeetingDetail? meeting) {
     if (meeting == null) {
       return '00:00';
@@ -221,6 +303,7 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
           typeValue: _actionType,
           assigneeController: _actionAssigneeController,
           contentController: _actionContentController,
+          dueDate: _actionDueDate,
           onTypeChanged: (value) => setState(() => _actionType = value),
           onSubmit: () {
             final content = _actionContentController.text.trim();
@@ -228,9 +311,9 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
                 ? defaultAssignee
                 : _actionAssigneeController.text.trim();
             if (content.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('내용을 입력해주세요.')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('내용을 입력해주세요.')));
               return;
             }
             controller.addActionItem(
@@ -238,9 +321,13 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
                 type: _actionType,
                 assignee: assignee,
                 content: content,
+                dueDate: _actionDueDate?.toIso8601String().split('T').first,
               ),
             );
             _actionContentController.clear();
+            setState(() {
+              _actionDueDate = null;
+            });
           },
           onGenerate: controller.extractActionItems,
           onComplete: (itemId) =>
@@ -248,6 +335,7 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
           onReopen: (itemId) =>
               controller.updateActionItemStatus(itemId, 'pending'),
           onDelete: controller.deleteActionItem,
+          onPickDueDate: (date) => setState(() => _actionDueDate = date),
         );
       case 3:
         return ParticipationTab(
@@ -270,6 +358,8 @@ class MeetingTopBar extends StatelessWidget {
     required this.onEndMeeting,
     required this.onRefresh,
     required this.onRequestRecordingUpload,
+    required this.isMuted,
+    required this.onToggleMute,
   });
 
   final String meetingTitle;
@@ -280,6 +370,8 @@ class MeetingTopBar extends StatelessWidget {
   final VoidCallback onRefresh;
   // Request presigned upload URL for recording
   final VoidCallback onRequestRecordingUpload;
+  final bool isMuted;
+  final VoidCallback onToggleMute;
 
   @override
   Widget build(BuildContext context) {
@@ -288,9 +380,7 @@ class MeetingTopBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
         color: Color(0xFF0F172A),
-        border: Border(
-          bottom: BorderSide(color: Color(0xFF334155)),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFF334155))),
       ),
       child: Row(
         children: [
@@ -346,8 +436,19 @@ class MeetingTopBar extends StatelessWidget {
             icon: const Icon(Icons.refresh, color: Colors.white70),
           ),
           IconButton(
+            onPressed: onToggleMute,
+            icon: Icon(
+              isMuted ? Icons.mic_off : Icons.mic,
+              color: Colors.white70,
+            ),
+            tooltip: isMuted ? '음소거 해제' : '음소거',
+          ),
+          IconButton(
             onPressed: onRequestRecordingUpload,
-            icon: const Icon(Icons.cloud_upload_outlined, color: Colors.white70),
+            icon: const Icon(
+              Icons.cloud_upload_outlined,
+              color: Colors.white70,
+            ),
             tooltip: '녹음 업로드 URL 요청',
           ),
           const SizedBox(width: 12),
@@ -381,78 +482,80 @@ class ParticipantsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final hasBoundedHeight =
-          constraints.hasBoundedHeight && constraints.maxHeight.isFinite;
-      final listWidget = participants.isEmpty
-          ? const Center(
-              child: Text(
-                '아직 참여자가 없습니다.',
-                style: TextStyle(color: Colors.grey),
-              ),
-            )
-          : ListView.separated(
-              shrinkWrap: !hasBoundedHeight,
-              physics:
-                  hasBoundedHeight ? null : const NeverScrollableScrollPhysics(),
-              itemBuilder: (context, index) {
-                final attendee = participants[index];
-                final isSpeaking =
-                    activeSpeaker != null &&
-                    attendee.displayName == activeSpeaker;
-                return _ParticipantCard(
-                  name: attendee.displayName,
-                  isSpeaking: isSpeaking,
-                );
-              },
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemCount: participants.length,
-            );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final hasBoundedHeight =
+            constraints.hasBoundedHeight && constraints.maxHeight.isFinite;
+        final listWidget = participants.isEmpty
+            ? const Center(
+                child: Text(
+                  '아직 참여자가 없습니다.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              )
+            : ListView.separated(
+                shrinkWrap: !hasBoundedHeight,
+                physics: hasBoundedHeight
+                    ? null
+                    : const NeverScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final attendee = participants[index];
+                  final isSpeaking =
+                      activeSpeaker != null &&
+                      attendee.displayName == activeSpeaker;
+                  return _ParticipantCard(
+                    name: attendee.displayName,
+                    isSpeaking: isSpeaking,
+                  );
+                },
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemCount: participants.length,
+              );
 
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF334155)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  '참여자',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF334155)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    '참여자',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(999),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      participants.length.toString(),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
                   ),
-                  child: Text(
-                    participants.length.toString(),
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (hasBoundedHeight)
-              Expanded(child: listWidget)
-            else
-              listWidget,
-          ],
-        ),
-      );
-    });
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (hasBoundedHeight) Expanded(child: listWidget) else listWidget,
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -563,7 +666,9 @@ class MeetingTabs extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFF334155) : Colors.transparent,
+                  color: isActive
+                      ? const Color(0xFF334155)
+                      : Colors.transparent,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -578,8 +683,9 @@ class MeetingTabs extends StatelessWidget {
                       tab.label,
                       style: TextStyle(
                         color: isActive ? Colors.white : Colors.grey,
-                        fontWeight:
-                            isActive ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: isActive
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                         fontSize: 14,
                       ),
                     ),
@@ -740,13 +846,15 @@ class SubtitlesTab extends StatelessWidget {
                         fillColor: const Color(0xFF334155),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide:
-                              const BorderSide(color: Color(0xFF475569)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF475569),
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide:
-                              const BorderSide(color: Color(0xFF475569)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF475569),
+                          ),
                         ),
                       ),
                       enabled: isConnected && !isSubmitting,
@@ -812,127 +920,130 @@ class AiSummaryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Container(
-              width: double.infinity,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Padding(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF312E81), Color(0xFF1E1B4B)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF4338CA)),
-              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.description_outlined, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            'AI 자동 요약',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF312E81), Color(0xFF1E1B4B)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF4338CA)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(
+                                  Icons.description_outlined,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'AI 자동 요약',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
+                            ElevatedButton(
+                              onPressed: isLoading ? null : onRegenerate,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: const Color(0xFF312E81),
+                              ),
+                              child: isLoading
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text('다시 생성'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          summary ?? '회의가 진행되면 AI가 자동으로 요약을 생성합니다.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 14,
+                            height: 1.4,
                           ),
-                        ],
-                      ),
-                      ElevatedButton(
-                        onPressed: isLoading ? null : onRegenerate,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF312E81),
                         ),
-                        child: isLoading
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('다시 생성'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Text(
-                        summary ??
-                            '회의가 진행되면 AI가 자동으로 요약을 생성합니다.',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
-                      ),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '회의 통계',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: const [
+                            _StatItem(label: '진행 시간 (분)', value: '0'),
+                            _StatItem(label: '발언 수', value: '0'),
+                            _StatItem(label: '액션 아이템', value: '0'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (onRealtimeRequest != null) ...[
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => onRealtimeRequest?.call('요약을 요청합니다.'),
+                      icon: const Icon(Icons.wifi_tethering),
+                      label: const Text('웹소켓으로 요약 요청'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0EA5E9),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 24),
-          Expanded(
-            flex: 1,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF334155)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '회의 통계',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: const [
-                      _StatItem(label: '진행 시간 (분)', value: '0'),
-                      _StatItem(label: '발언 수', value: '0'),
-                      _StatItem(label: '액션 아이템', value: '0'),
-                    ],
-                  ),
-                  const Spacer(),
-                ],
-              ),
-            ),
-          ),
-          if (onRealtimeRequest != null) ...[
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => onRealtimeRequest?.call('요약을 요청합니다.'),
-              icon: const Icon(Icons.wifi_tethering),
-              label: const Text('웹소켓으로 요약 요청'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0EA5E9),
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -956,10 +1067,7 @@ class _StatItem extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.grey, fontSize: 13),
-        ),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
       ],
     );
   }
@@ -974,12 +1082,14 @@ class ActionItemTab extends StatelessWidget {
     required this.typeValue,
     required this.assigneeController,
     required this.contentController,
+    required this.dueDate,
     required this.onTypeChanged,
     required this.onSubmit,
     required this.onGenerate,
     required this.onComplete,
     required this.onReopen,
     required this.onDelete,
+    required this.onPickDueDate,
   });
 
   final List<MeetingActionItem> items;
@@ -988,14 +1098,16 @@ class ActionItemTab extends StatelessWidget {
   final String typeValue;
   final TextEditingController assigneeController;
   final TextEditingController contentController;
+  final DateTime? dueDate;
   final ValueChanged<String> onTypeChanged;
   final VoidCallback onSubmit;
   final VoidCallback onGenerate;
   final void Function(String id) onComplete;
   final void Function(String id) onReopen;
   final void Function(String id) onDelete;
+  final void Function(DateTime? date) onPickDueDate;
 
-  static const _types = ['할일', '논의', 'Shared'];
+  static const _types = ['할 일', '논의', 'Shared'];
 
   @override
   Widget build(BuildContext context) {
@@ -1015,8 +1127,8 @@ class ActionItemTab extends StatelessWidget {
                     final item = items[index];
                     return Container(
                       padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF334155).withValues(alpha: 0.35),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF334155).withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFF475569)),
                       ),
@@ -1051,10 +1163,21 @@ class ActionItemTab extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 8),
+                          if (item.dueDate != null)
+                            Text(
+                              '마감일: ${item.dueDate}',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          const SizedBox(height: 8),
                           Text(
                             '담당자: ${item.assignee}',
-                            style:
-                                const TextStyle(color: Colors.grey, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Row(
@@ -1073,7 +1196,8 @@ class ActionItemTab extends StatelessWidget {
                                     ? () => onReopen(item.id)
                                     : () => onComplete(item.id),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: item.status.toLowerCase() == 'done'
+                                  backgroundColor:
+                                      item.status.toLowerCase() == 'done'
                                       ? const Color(0xFF6366F1)
                                       : const Color(0xFF22C55E),
                                   foregroundColor: Colors.white,
@@ -1140,6 +1264,42 @@ class ActionItemTab extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final selected = await showDatePicker(
+                          context: context,
+                          initialDate: dueDate ?? DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        onPickDueDate(selected);
+                      },
+                      icon: const Icon(Icons.calendar_today, size: 16),
+                      label: Text(
+                        dueDate == null
+                            ? '마감일 선택'
+                            : '마감일: ${dueDate!.year}.${dueDate!.month}.${dueDate!.day}',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.grey.shade600),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (dueDate != null)
+                    IconButton(
+                      onPressed: () => onPickDueDate(null),
+                      icon: const Icon(Icons.clear, color: Colors.white70),
+                      tooltip: '마감일 제거',
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
                     child: TextField(
                       controller: contentController,
                       style: const TextStyle(color: Colors.white),
@@ -1184,7 +1344,7 @@ class ActionItemTab extends StatelessWidget {
               ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
@@ -1257,10 +1417,7 @@ class ParticipationTab extends StatelessWidget {
               child: ListView.separated(
                 itemBuilder: (context, index) {
                   final stat = stats[index];
-                  return _ParticipationRow(
-                    rank: index + 1,
-                    stat: stat,
-                  );
+                  return _ParticipationRow(rank: index + 1, stat: stat);
                 },
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemCount: stats.length,

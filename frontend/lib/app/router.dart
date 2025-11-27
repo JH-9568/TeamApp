@@ -41,12 +41,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoute.dashboard.path,
             name: AppRoute.dashboard.name,
-            builder: (context, state) => const DashboardScreen(),
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: DashboardScreen(),
+            ),
           ),
           GoRoute(
             path: AppRoute.myPage.path,
             name: AppRoute.myPage.name,
-            builder: (context, state) => const MyPageScreen(),
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: MyPageScreen(),
+            ),
           ),
         ],
       ),

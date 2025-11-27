@@ -30,6 +30,5 @@ final meetingControllerProvider =
         userName: user?.name ?? '나',
       );
       controller.initialize();
-      ref.onDispose(controller.dispose);
       return controller;
     });

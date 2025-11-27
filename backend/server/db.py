@@ -5,6 +5,9 @@ engine = create_async_engine(
     DATABASE_URL,
     echo=True,
     pool_pre_ping=True,
+    pool_size=1,
+    max_overflow=0,
+    pool_timeout=30,
 )
 
 AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)

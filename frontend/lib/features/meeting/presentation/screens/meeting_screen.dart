@@ -33,6 +33,8 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
   StreamSubscription<Uint8List>? _micSubscription;
   bool _isMuted = true;
   bool _isMicActive = false;
+  Timer? _ticker;
+  DateTime? _localStart;
 
   @override
   void dispose() {
@@ -41,12 +43,18 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
     _transcriptController.dispose();
     _stopMic();
     _recorder.dispose();
+    _ticker?.cancel();
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -72,8 +80,10 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
       final meetingEnded = prevStatus == 'in-progress' && nextStatus != 'in-progress';
 
       if (meetingStarted) {
+        _localStart = DateTime.now();
         _startMicStreaming(meetingId);
       } else if (meetingEnded) {
+        _localStart = null;
         _stopMic();
       }
 
@@ -259,19 +269,71 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
   }
 
   String _timerLabel(MeetingDetail? meeting) {
-    if (meeting == null) {
-      return '00:00';
+    if (meeting == null) return '00:00:00';
+
+    final storedMinutes = meeting.duration ?? 0;
+    if (meeting.status == 'completed') {
+      final durationMinutes = storedMinutes > 0
+          ? storedMinutes
+          : _computeDurationFromTimes(meeting) ?? 0;
+      final hours = durationMinutes ~/ 60;
+      final mins = durationMinutes % 60;
+      return '${hours.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}:00';
     }
-    if (meeting.duration != null && meeting.duration! > 0) {
-      final minutes = meeting.duration!;
-      final hours = minutes ~/ 60;
-      final mins = minutes % 60;
-      if (hours > 0) {
-        return '${hours.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}';
-      }
-      return '00:${mins.toString().padLeft(2, '0')}';
+
+    final start = _localStart ?? _parseStartDateTime(meeting);
+    if (start == null) return '00:00:00';
+    final elapsed = DateTime.now().difference(start);
+    final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
+    final hours = totalSeconds ~/ 3600;
+    final mins = (totalSeconds % 3600) ~/ 60;
+    final secs = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+
+  DateTime? _parseStartDateTime(MeetingDetail meeting) {
+    final time = meeting.startTime;
+    if (time == null || time.isEmpty) return null;
+
+    DateTime baseDate = DateTime.now();
+    if (meeting.date != null && meeting.date!.isNotEmpty) {
+      try {
+        baseDate = DateTime.parse(meeting.date!);
+      } catch (_) {}
     }
-    return meeting.startTime ?? '00:00';
+
+    final parts = time.split(':');
+    if (parts.length < 2) return null;
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+
+    final utcDate = DateTime.utc(baseDate.year, baseDate.month, baseDate.day, hour, minute);
+    return utcDate.toLocal();
+  }
+
+  DateTime? _parseEndDateTime(MeetingDetail meeting) {
+    final end = meeting.endTime;
+    if (end == null || end.isEmpty) return null;
+    DateTime baseDate = DateTime.now();
+    if (meeting.date != null && meeting.date!.isNotEmpty) {
+      try {
+        baseDate = DateTime.parse(meeting.date!);
+      } catch (_) {}
+    }
+    final parts = end.split(':');
+    if (parts.length < 2) return null;
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+    final utcDate = DateTime.utc(baseDate.year, baseDate.month, baseDate.day, hour, minute);
+    return utcDate.toLocal();
+  }
+
+  int? _computeDurationFromTimes(MeetingDetail meeting) {
+    final start = _parseStartDateTime(meeting);
+    final end = _parseEndDateTime(meeting);
+    if (start == null || end == null) return null;
+    final diff = end.difference(start).inMinutes;
+    return diff > 0 ? diff : 0;
   }
 
   Widget _buildTabContent(

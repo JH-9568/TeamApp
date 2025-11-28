@@ -65,7 +65,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoute.meetingDetail.path,
         name: AppRoute.meetingDetail.name,
-        builder: (context, state) => const MeetingDetailScreen(),
+        builder: (context, state) {
+          final meetingId = state.uri.queryParameters['meetingId'];
+          return MeetingDetailScreen(meetingId: meetingId);
+        },
       ),
     ],
     redirect: (context, state) {

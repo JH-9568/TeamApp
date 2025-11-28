@@ -243,7 +243,9 @@ class MeetingController extends StateNotifier<MeetingState> {
 
   void _updateMeeting(MeetingDetail? meeting) {
     if (meeting == null) return;
-    state = state.copyWith(meeting: meeting);
+    final stats = _computeSpeakerStats(meeting.transcripts);
+    final meetingWithStats = meeting.copyWith(speakerStats: stats);
+    state = state.copyWith(meeting: meetingWithStats);
   }
 
   Future<void> _registerAttendee() async {
@@ -289,12 +291,13 @@ class MeetingController extends StateNotifier<MeetingState> {
       if (_isSilent(data)) {
         return;
       }
+      final speakerLabel = userName.isNotEmpty ? userName : '참여자';
       channel.sink.add(
         jsonEncode({
           'type': 'audio_chunk',
           'data': {
             'data': base64Encode(data),
-            'speaker': userName,
+            'speaker': speakerLabel,
             'timestamp': DateTime.now().toIso8601String(),
           },
         }),
@@ -424,4 +427,41 @@ class MeetingController extends StateNotifier<MeetingState> {
     // Treat very low RMS as silence; keep threshold modest to avoid dropping speech
     return rms < 800;
   }
+
+  List<SpeakerStat> _computeSpeakerStats(List<TranscriptSegment> transcripts) {
+    if (transcripts.isEmpty) return const [];
+
+    final totals = <String, _SpeakerAgg>{};
+    for (final t in transcripts) {
+      final speaker = (t.speaker.isNotEmpty ? t.speaker : '참여자').trim();
+      final textLen = t.text.trim().length;
+      final agg = totals.putIfAbsent(speaker, () => _SpeakerAgg());
+      agg.count += 1;
+      agg.totalLength += textLen;
+    }
+
+    final totalSegments = transcripts.length;
+    final stats = totals.entries.map((entry) {
+      final speaker = entry.key;
+      final agg = entry.value;
+      final avgLen = agg.count > 0 ? agg.totalLength / agg.count : 0.0;
+      final participation = totalSegments > 0 ? (agg.count / totalSegments) * 100.0 : 0.0;
+      return SpeakerStat(
+        id: 'local-$speaker',
+        speaker: speaker,
+        speakTime: agg.totalLength, // proxy: total text length
+        speakCount: agg.count,
+        participationRate: participation,
+        avgLength: avgLen,
+      );
+    }).toList()
+      ..sort((a, b) => b.speakTime.compareTo(a.speakTime));
+
+    return stats;
+  }
+}
+
+class _SpeakerAgg {
+  int count = 0;
+  int totalLength = 0;
 }

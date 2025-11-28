@@ -22,9 +22,9 @@ class GoogleSpeechService:
         language_code: str = "ko-KR",
         sample_rate: int = 16000,
         enable_punctuation: bool = True,
-        min_chunk_seconds: float = 1.0,
-        max_buffer_seconds: float = 5.0,
-        silence_rms_threshold: float = 200.0,
+        min_chunk_seconds: float = 3.5,
+        max_buffer_seconds: float = 8.0,
+        silence_rms_threshold: float = 400.0,
     ) -> None:
         if speech is None:
             raise STTNotAvailableError(

@@ -215,6 +215,57 @@ class DashboardController extends StateNotifier<DashboardState> {
     }
   }
 
+  Future<void> editActionItem(
+    String actionItemId, {
+    String? type,
+    String? assignee,
+    String? content,
+    String? status,
+    DateTime? dueDate,
+  }) async {
+    final current = state.data;
+    if (current == null) return;
+    try {
+      final updated = await _repository.updateActionItem(
+        actionItemId,
+        type: type,
+        assignee: assignee,
+        content: content,
+        status: status,
+        dueDate: dueDate,
+      );
+      final items = current.actionItems.map((item) {
+        return item.id == actionItemId ? updated : item;
+      }).toList();
+      state = state.copyWith(
+        data: DashboardData(
+          team: current.team,
+          actionItems: items,
+          meetings: current.meetings,
+        ),
+      );
+    } on UnauthorizedException catch (error) {
+      debugPrint(
+        '[DashboardController] editActionItem unauthorized: ${error.message}',
+      );
+      final refreshed = await _onUnauthorized();
+      if (refreshed) {
+        return editActionItem(
+          actionItemId,
+          type: type,
+          assignee: assignee,
+          content: content,
+          status: status,
+          dueDate: dueDate,
+        );
+      }
+      state = state.copyWith(errorMessage: error.message);
+    } catch (error, stack) {
+      debugPrint('Failed to edit action item: $error\n$stack');
+      state = state.copyWith(errorMessage: error.toString());
+    }
+  }
+
   Future<void> deleteActionItem(String actionItemId) async {
     final current = state.data;
     if (current == null) return;

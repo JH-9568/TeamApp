@@ -56,6 +56,24 @@ class DashboardRepository {
     return _api.updateActionItemStatus(actionItemId, status);
   }
 
+  Future<DashboardActionItem> updateActionItem(
+    String actionItemId, {
+    String? type,
+    String? assignee,
+    String? content,
+    String? status,
+    DateTime? dueDate,
+  }) {
+    return _api.updateActionItem(
+      actionItemId,
+      type: type,
+      assignee: assignee,
+      content: content,
+      status: status,
+      dueDate: dueDate,
+    );
+  }
+
   Future<void> deleteActionItem(String actionItemId) {
     return _api.deleteActionItem(actionItemId);
   }

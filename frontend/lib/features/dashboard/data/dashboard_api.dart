@@ -162,6 +162,36 @@ class DashboardApi {
     return DashboardActionItem.fromJson(json);
   }
 
+  Future<DashboardActionItem> updateActionItem(
+    String actionItemId, {
+    String? type,
+    String? assignee,
+    String? content,
+    String? status,
+    DateTime? dueDate,
+  }) async {
+    final body = <String, dynamic>{};
+    if (type != null) body['type'] = type.trim();
+    if (assignee != null) body['assignee'] = assignee.trim();
+    if (content != null) body['content'] = content.trim();
+    if (status != null) body['status'] = status;
+    if (dueDate != null) {
+      body['dueDate'] = dueDate.toIso8601String().split('T').first;
+    }
+
+    final response = await http.patch(
+      _uri('/api/action-items/$actionItemId'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    debugPrint(
+      '[DashboardApi] PATCH /api/action-items/$actionItemId (edit) -> ${response.statusCode}',
+    );
+    _throwOnError(response);
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return DashboardActionItem.fromJson(json);
+  }
+
   Future<void> deleteActionItem(String actionItemId) async {
     final response = await http.delete(
       _uri('/api/action-items/$actionItemId'),

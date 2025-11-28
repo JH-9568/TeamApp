@@ -89,6 +89,7 @@ class DashboardScreen extends ConsumerWidget {
                                   _StatsRow(
                                     data: data,
                                     userId: authState.session?.user.id,
+                                    userName: authState.session?.user.name,
                                   ),
                                   const SizedBox(height: 24),
                                   if (dashboardState.errorMessage != null)
@@ -144,6 +145,9 @@ class DashboardScreen extends ConsumerWidget {
                                                       ).notifier,
                                                     )
                                                     .deleteActionItem(id),
+                                                onEdit: (item) =>
+                                                    _handleEditActionItem(
+                                                        context, ref, item, teamId),
                                               ),
                                               const SizedBox(height: 24),
                                               _RightPanelSection(
@@ -198,6 +202,9 @@ class DashboardScreen extends ConsumerWidget {
                                                       ).notifier,
                                                     )
                                                     .deleteActionItem(id),
+                                                onEdit: (item) =>
+                                                    _handleEditActionItem(
+                                                        context, ref, item, teamId),
                                               ),
                                             ),
                                             const SizedBox(width: 24),
@@ -271,6 +278,36 @@ class DashboardScreen extends ConsumerWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('추가에 실패했습니다: $error')));
+    }
+  }
+
+  Future<void> _handleEditActionItem(
+    BuildContext context,
+    WidgetRef ref,
+    DashboardActionItem item,
+    String teamId,
+  ) async {
+    final result = await _showEditActionItemDialog(context, item);
+    if (result == null) return;
+    try {
+      await ref.read(dashboardControllerProvider(teamId).notifier).editActionItem(
+            item.id,
+            type: result.type,
+            assignee: result.assignee,
+            content: result.content,
+            status: result.status,
+            dueDate: result.dueDate,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('액션 아이템이 수정되었습니다.')),
+      );
+    } catch (error, stack) {
+      debugPrint('Failed to edit action item: $error\n$stack');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('수정에 실패했습니다: $error')),
+      );
     }
   }
 
@@ -523,6 +560,179 @@ class DashboardScreen extends ConsumerWidget {
                               ),
                             ),
                             child: const Text('추가하기'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<_ActionItemFormResult?> _showEditActionItemDialog(
+    BuildContext context,
+    DashboardActionItem item,
+  ) {
+    final formKey = GlobalKey<FormState>();
+    final typeController = TextEditingController(text: item.type);
+    final assigneeController = TextEditingController(text: item.assignee);
+    final contentController = TextEditingController(text: item.content);
+    String status = item.status;
+    DateTime? dueDate = item.dueDate;
+
+    String? validateRequired(String? value, String label) {
+      if (value == null || value.trim().isEmpty) {
+        return '$label을(를) 입력해주세요.';
+      }
+      return null;
+    }
+
+    return showDialog<_ActionItemFormResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              '액션 아이템 수정',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              icon: const Icon(Icons.close, size: 20),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: typeController,
+                          decoration: const InputDecoration(
+                            labelText: '타입',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) => validateRequired(value, '타입'),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: assigneeController,
+                          decoration: const InputDecoration(
+                            labelText: '담당자',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) => validateRequired(value, '담당자'),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: contentController,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            labelText: '내용',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) => validateRequired(value, '내용'),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: dueDate ?? DateTime.now(),
+                                    firstDate: DateTime(2000),
+                                    lastDate: DateTime(2100),
+                                  );
+                                  if (picked != null) {
+                                    setState(() => dueDate = picked);
+                                  }
+                                },
+                                icon: const Icon(
+                                  Icons.calendar_today,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  dueDate == null
+                                      ? '마감일 선택'
+                                      : '마감일: ${dueDate!.year}.${dueDate!.month}.${dueDate!.day}',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            DropdownButton<String>(
+                              value: status,
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'pending',
+                                  child: Text('진행'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'done',
+                                  child: Text('완료'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => status = value);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (formKey.currentState?.validate() != true) {
+                                return;
+                              }
+                              Navigator.of(context).pop(
+                                _ActionItemFormResult(
+                                  meetingId: item.meetingId,
+                                  type: typeController.text.trim(),
+                                  assignee: assigneeController.text.trim(),
+                                  content: contentController.text.trim(),
+                                  status: status,
+                                  dueDate: dueDate,
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF4B5563),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text('수정하기'),
                           ),
                         ),
                       ],
@@ -932,17 +1142,22 @@ class _TeamPickerTile extends StatelessWidget {
 }
 
 class _StatsRow extends StatelessWidget {
-  const _StatsRow({this.data, this.userId});
+  const _StatsRow({this.data, this.userId, this.userName});
 
   final DashboardData? data;
   final String? userId;
+  final String? userName;
 
   @override
   Widget build(BuildContext context) {
     final totalMeetings = data?.meetings.length ?? 0;
     final myItems = (data?.actionItems ?? []).where((item) {
-      if (userId == null) return false;
-      return item.assigneeUserId == userId;
+      final idMatch =
+          userId != null && item.assigneeUserId != null && item.assigneeUserId == userId;
+      final nameMatch = (userName != null && userName!.isNotEmpty)
+          ? item.assignee.trim() == userName!.trim()
+          : false;
+      return idMatch || nameMatch;
     }).toList();
     final myCompleted = myItems
         .where((item) => item.status.toLowerCase() == 'done')
@@ -987,11 +1202,35 @@ class _StatsRow extends StatelessWidget {
 
   static int _averageDurationMinutes(List<DashboardMeeting> meetings) {
     final durations = meetings
-        .map((meeting) => meeting.duration ?? 0)
-        .where((d) => d > 0);
+        .map(_computeMeetingDurationMinutes)
+        .where((d) => d > 0)
+        .toList();
+    if (durations.isEmpty) return 0;
     final total = durations.fold<int>(0, (sum, value) => sum + value);
-    if (total == 0) return 0;
-    return (total / meetings.length).round();
+    return (total / durations.length).round();
+  }
+
+  static int _computeMeetingDurationMinutes(DashboardMeeting meeting) {
+    if ((meeting.duration ?? 0) > 0) {
+      return meeting.duration!;
+    }
+    final start = meeting.startDateTime;
+    if (start == null || meeting.endTime == null) {
+      return 0;
+    }
+    final parts = meeting.endTime!.split(':');
+    if (parts.length < 2) return 0;
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+    final end = DateTime(
+      start.year,
+      start.month,
+      start.day,
+      hour,
+      minute,
+    );
+    final diff = end.difference(start).inMinutes;
+    return diff > 0 ? diff : 0;
   }
 }
 
@@ -1060,6 +1299,7 @@ class _ActionItemsSection extends StatelessWidget {
     this.onComplete,
     this.onReopen,
     this.onDelete,
+    this.onEdit,
   });
 
   final List<DashboardActionItem> items;
@@ -1068,6 +1308,7 @@ class _ActionItemsSection extends StatelessWidget {
   final void Function(String id)? onComplete;
   final void Function(String id)? onReopen;
   final void Function(String id)? onDelete;
+  final void Function(DashboardActionItem item)? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -1192,6 +1433,7 @@ class _ActionItemsSection extends StatelessWidget {
                 onComplete: onComplete,
                 onReopen: onReopen,
                 onDelete: onDelete,
+                onEdit: onEdit,
               ),
             ),
           ),
@@ -1206,12 +1448,14 @@ class _ActionItemCard extends StatelessWidget {
     this.onComplete,
     this.onReopen,
     this.onDelete,
+    this.onEdit,
   });
 
   final DashboardActionItem item;
   final void Function(String id)? onComplete;
   final void Function(String id)? onReopen;
   final void Function(String id)? onDelete;
+  final void Function(DashboardActionItem item)? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -1232,11 +1476,11 @@ class _ActionItemCard extends StatelessWidget {
           ),
         ],
       ),
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Container(
-              width: 4,
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
               decoration: BoxDecoration(
                 color: statusColor,
                 borderRadius: const BorderRadius.only(
@@ -1294,6 +1538,14 @@ class _ActionItemCard extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        TextButton(
+                          onPressed: onEdit == null ? null : () => onEdit!(item),
+                          child: const Text(
+                            '수정',
+                            style: TextStyle(color: Color(0xFF2563EB)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         TextButton(
                           onPressed:
                               onDelete == null ? null : () => onDelete!(item.id),
@@ -1414,7 +1666,7 @@ class _RightPanelSection extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         const Text(
-          '예정된 회의',
+          '최근 회의',
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
@@ -1428,69 +1680,75 @@ class _RightPanelSection extends StatelessWidget {
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
                   child: Text(
-                    '예정된 회의가 없습니다.',
+                    '최근 회의가 없습니다.',
                     style: TextStyle(color: Colors.grey),
                   ),
                 )
-              : Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0F5FF),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFDBEAFE)),
+              : InkWell(
+                  onTap: () => context.push(
+                    '${AppRoute.meetingDetail.path}?meetingId=${nextMeeting.id}',
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              nextMeeting.title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F5FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFDBEAFE)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                nextMeeting.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade100,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              nextMeeting.status,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.blue.shade700,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                nextMeeting.status,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.blue.shade700,
+                                ),
                               ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _meetingTimeLabel(nextMeeting),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_today,
-                            size: 12,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _meetingTimeLabel(nextMeeting),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.list_alt, size: 14, color: Colors.black54),
+                            const SizedBox(width: 4),
+                            Text(
+                              '액션 아이템 ${nextMeeting.actionItemsCount}개',
+                              style: const TextStyle(fontSize: 12, color: Colors.black54),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
         ),
@@ -1515,19 +1773,15 @@ class _RightPanelSection extends StatelessWidget {
   }
 
   DashboardMeeting? _nextMeeting(List<DashboardMeeting> meetings) {
-    final upcoming =
-        meetings.where((meeting) {
-          final start = meeting.startDateTime;
-          if (start == null) return false;
-          return start.isAfter(
-            DateTime.now().subtract(const Duration(days: 1)),
-          );
-        }).toList()..sort((a, b) {
-          final dateA = a.startDateTime ?? DateTime(2100);
-          final dateB = b.startDateTime ?? DateTime(2100);
-          return dateA.compareTo(dateB);
-        });
-    return upcoming.isEmpty ? null : upcoming.first;
+    final recent = meetings.where((meeting) {
+      return meeting.status.toLowerCase() != 'scheduled';
+    }).toList()
+      ..sort((a, b) {
+        final dateA = a.startDateTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = b.startDateTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return dateB.compareTo(dateA);
+      });
+    return recent.isEmpty ? null : recent.first;
   }
 
   String _meetingTimeLabel(DashboardMeeting meeting) {

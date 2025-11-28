@@ -23,11 +23,14 @@ final meetingControllerProvider =
       meetingId,
     ) {
       final user = ref.read(authControllerProvider).session?.user;
+      final displayName = (user?.name != null && user!.name.isNotEmpty)
+          ? user.name
+          : (user?.email ?? '참여자');
       final controller = MeetingController(
         ref.watch(meetingRepositoryProvider),
         meetingId,
         userId: user?.id,
-        userName: user?.name ?? '나',
+        userName: displayName,
       );
       controller.initialize();
       return controller;

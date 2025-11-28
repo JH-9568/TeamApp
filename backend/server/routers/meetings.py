@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from ..db import get_db
 from ..deps import ensure_meeting_access, ensure_team_member, get_current_user
-from ..models import ActionItem, Meeting, User
+from ..models import ActionItem, Meeting, Transcript, User
 from ..schemas import (
     MeetingCreateRequest,
     MeetingListResponse,
@@ -24,6 +24,7 @@ from ..schemas import (
     ActionItemResponse,
     SpeakerStatisticResponse,
 )
+from ..services.llm import llm_service
 
 router = APIRouter(prefix="/api", tags=["meetings"])
 
@@ -72,6 +73,8 @@ async def list_team_meetings(
     )
     if status_filter:
         stmt = stmt.where(Meeting.status == status_filter)
+    else:
+        stmt = stmt.where(Meeting.status != "scheduled")
 
     res = await db.execute(stmt)
     meetings = res.all()
@@ -212,6 +215,7 @@ async def update_meeting(
     current_user: User = Depends(get_current_user),
 ) -> MeetingEnvelope:
     meeting = await ensure_meeting_access(db, meeting_id, current_user.id)
+    previous_status = meeting.status
 
     if payload.end_time is not None:
         meeting.end_time = payload.end_time
@@ -231,5 +235,44 @@ async def update_meeting(
     db.add(meeting)
     await db.commit()
     await db.refresh(meeting)
+
+    # Auto-generate summary and action items on completion
+    if previous_status != "completed" and meeting.status == "completed":
+        transcript_stmt = (
+            select(Transcript)
+            .where(Transcript.meeting_id == meeting.id)
+            .order_by(Transcript.created_at.asc())
+        )
+        res = await db.execute(transcript_stmt)
+        transcripts = res.scalars().all()
+
+        transcript_payload = [
+            {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
+            for t in transcripts
+        ]
+
+        if transcript_payload:
+            summary = await llm_service.summarize(transcript_payload)
+            meeting.summary = summary
+            db.add(meeting)
+            await db.commit()
+            await db.refresh(meeting)
+
+            suggestions = await llm_service.extract_action_items(transcript_payload)
+            if suggestions:
+                now = datetime.utcnow()
+                for suggestion in suggestions:
+                    action_item = ActionItem(
+                        meeting_id=meeting.id,
+                        type=suggestion.get("type") or "task",
+                        assignee=suggestion.get("assignee") or "Unassigned",
+                        content=suggestion.get("content") or "Action item",
+                        status="pending",
+                        due_date=None,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    db.add(action_item)
+                await db.commit()
 
     return MeetingEnvelope(meeting=serialize_meeting(meeting))

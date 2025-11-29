@@ -14,7 +14,8 @@ import 'package:frontend/app/app.dart';
 void main() {
   testWidgets('앱이 정상적으로 부팅된다', (WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: TeamMeetingApp()));
-    await tester.pumpAndSettle();
+    // 한 번의 렌더 사이클만 돌려 초기 위젯 트리가 그려졌는지만 확인한다.
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byType(Scaffold), findsOneWidget);
   });

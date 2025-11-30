@@ -1,7 +1,7 @@
 # Teamapp Architecture & Testing Quickstart
 
 ## 구조 요약
-- 클라이언트(Flutter): 라우팅 `frontend/lib/app/router.dart`, 상태 `riverpod`, 세션 저장 `frontend/lib/core/services/auth_service.dart` + `shared_preferences`. 대시보드/회의 화면은 `frontend/lib/features/**`.
+- 클라이언트(Flutter): 라우팅 Goroute `frontend/lib/app/router.dart`, 상태 `riverpod`, 세션 저장 `frontend/lib/core/services/auth_service.dart` + `shared_preferences`. 대시보드/회의 화면은 `frontend/lib/features/**`.
 - 서버(FastAPI): 엔트리 `backend/server/main.py`, 인증/권한 `backend/server/deps.py`, 도메인 라우터 `backend/server/routers/*`. DB는 `DATABASE_URL` 기반 async SQLAlchemy, 실시간 오디오/이벤트는 Redis(`backend/server/redis.py`)로 송수신 후 STT 워커가 처리.
 - AI/음성: LLM 요약·액션아이템 `backend/server/services/llm.py`, STT 필터·처리 `backend/server/workers/stt_worker.py`.
 

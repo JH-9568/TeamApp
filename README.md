@@ -21,3 +21,7 @@
   cd /Users/jjh/team-app/frontend
   flutter test
   ```
+
+## 라이선스
+- 프로젝트 라이선스: MIT (`LICENSE`)
+- 사용한 서드파티 라이브러리와 라이선스 요약: `THIRD_PARTY_NOTICES.md`

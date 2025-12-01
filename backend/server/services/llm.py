@@ -12,13 +12,12 @@ try:
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
     from langchain_google_genai import ChatGoogleGenerativeAI
-    from langchain_openai import ChatOpenAI
 
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
 
-from ..config import AI_PREFERRED_MODEL, GEMINI_API_KEY, OPENAI_API_KEY
+from ..config import AI_PREFERRED_MODEL, GEMINI_API_KEY
 
 TranscriptPayload = List[dict[str, str]]
 
@@ -34,9 +33,6 @@ class LLMService:
         if GEMINI_API_KEY:
             self.provider = "gemini"
             self.api_key = GEMINI_API_KEY
-        elif OPENAI_API_KEY:
-            self.provider = "openai"
-            self.api_key = OPENAI_API_KEY
         else:
             self.api_key = None
 
@@ -66,8 +62,6 @@ class LLMService:
 
         if self.provider == "gemini":
             return await self._call_gemini(prompt, temperature=0.3)
-        if self.provider == "openai":
-            return await self._call_openai(prompt)
 
         return self._fallback_summary(transcript)
 
@@ -94,13 +88,6 @@ class LLMService:
                 return parsed
             return self._fallback_actions(transcript)
 
-        if self.provider == "openai":
-            data = await self._call_openai(prompt)
-            parsed = self._try_parse_action_json(data)
-            if parsed is not None:
-                return parsed
-            return self._fallback_actions(transcript)
-
         return self._fallback_actions(transcript)
 
     def _init_langchain_chains(self) -> None:
@@ -112,12 +99,6 @@ class LLMService:
                 model=self.model or "gemini-pro",
                 google_api_key=self.api_key,
                 convert_system_message_to_human=True,
-            )
-        elif self.provider == "openai":
-            llm = ChatOpenAI(
-                model=self.model or "gpt-4o-mini",
-                api_key=self.api_key,
-                temperature=0.2,
             )
         else:
             raise LLMNotConfiguredError("Unsupported provider for LangChain")
@@ -179,34 +160,6 @@ class LLMService:
 
         try:
             text = data["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError):
-            text = ""
-        return text.strip() or "요약을 생성하지 못했습니다."
-
-    async def _call_openai(self, prompt: str) -> str:
-        if not OPENAI_API_KEY:
-            raise LLMNotConfiguredError("OPENAI_API_KEY is not configured")
-        if httpx is None:
-            raise RuntimeError("httpx is required for OpenAI calls. Install httpx>=0.25.")
-
-        url = "https://api.openai.com/v1/chat/completions"
-        payload = {
-            "model": self.model or "gpt-4o-mini",
-            "messages": [
-                {"role": "system", "content": "You are a helpful AI for meeting analytics."},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.2,
-        }
-        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-
-        async with httpx.AsyncClient(timeout=60) as client:
-            res = await client.post(url, json=payload, headers=headers)
-            res.raise_for_status()
-            data = res.json()
-
-        try:
-            text = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError):
             text = ""
         return text.strip() or "요약을 생성하지 못했습니다."

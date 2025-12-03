@@ -21,6 +21,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
+      - name: Create test .env
+        run: |
+          cat <<'EOF' > .env
+          DATABASE_URL=sqlite+aiosqlite:///./backend/sql_app.db
+          JWT_SECRET=testsecret
+          JWT_ALGORITHM=HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES=60
+          REFRESH_TOKEN_EXPIRE_MINUTES=10080
+          REDIS_URL=redis://localhost:6379/0
+          STT_PROVIDER=whisper
+          STT_LANGUAGE=ko-KR
+          STT_POLL_INTERVAL=1.0
+          STORAGE_BUCKET=local-bucket
+          STORAGE_BASE_URL=https://storage.local
+          EOF
+
       - name: Run pytest
         env:
           PYTHONPATH: .

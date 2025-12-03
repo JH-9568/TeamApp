@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 aiosqlite
+python-dotenv
 redis
 python-jose[cryptography]
 passlib

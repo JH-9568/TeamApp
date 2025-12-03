@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from google.cloud import storage
+
 from ..config import STORAGE_BASE_URL, STORAGE_BUCKET
 from ..db import get_db
 from ..deps import ensure_meeting_access, get_current_user
@@ -30,9 +32,25 @@ async def request_recording_upload(
 
     expires_at = datetime.utcnow() + timedelta(minutes=10)
     object_key = f"{meeting.id}/{uuid.uuid4()}.wav"
+
+    try:
+        client = storage.Client()
+        bucket = client.bucket(STORAGE_BUCKET)
+        blob = bucket.blob(object_key)
+        upload_url = blob.generate_signed_url(
+            expiration=expires_at,
+            method="PUT",
+            content_type="audio/wav",
+            version="v4",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Failed to create signed upload URL: {exc}",
+        )
+
     base_url = STORAGE_BASE_URL.rstrip("/")
-    recording_url = f"{base_url}/{STORAGE_BUCKET}/{object_key}"
-    upload_url = f"{recording_url}?signed=1&expires={int(expires_at.timestamp())}"
+    recording_url = f"{base_url}/{object_key}"
 
     meeting.recording_url = recording_url
     meeting.updated_at = datetime.utcnow()

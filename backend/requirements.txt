@@ -8,3 +8,5 @@ python-jose[cryptography]
 passlib
 pytest
 httpx
+google-cloud-speech
+google-cloud-storage

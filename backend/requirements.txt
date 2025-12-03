@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+aiosqlite
+redis
+python-jose[cryptography]
+passlib
+pytest

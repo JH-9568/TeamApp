@@ -10,3 +10,4 @@ pytest
 httpx
 google-cloud-speech
 google-cloud-storage
+email-validator>=2.1.0

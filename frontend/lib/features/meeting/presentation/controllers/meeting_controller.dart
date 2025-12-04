@@ -255,7 +255,7 @@ class MeetingController extends StateNotifier<MeetingState> {
       await _repository.registerAttendee(
         meetingId,
         userId: userId,
-        guestName: fallbackName,
+        guestName: userId == null || userId!.isEmpty ? fallbackName : null,
       );
       final attendees = await _repository.fetchAttendees(meetingId);
       state = state.copyWith(attendees: attendees);
@@ -298,6 +298,7 @@ class MeetingController extends StateNotifier<MeetingState> {
           'data': {
             'data': base64Encode(data),
             'speaker': speakerLabel,
+            if (userId != null && userId!.isNotEmpty) 'userId': userId,
             'timestamp': DateTime.now().toIso8601String(),
           },
         }),

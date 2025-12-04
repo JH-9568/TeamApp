@@ -22,8 +22,8 @@ class GoogleSpeechService:
         language_code: str = "ko-KR",
         sample_rate: int = 16000,
         enable_punctuation: bool = True,
-        min_chunk_seconds: float = 3.5,
-        max_buffer_seconds: float = 8.0,
+        min_chunk_seconds: float = 1.0,
+        max_buffer_seconds: float = 4.0,
         silence_rms_threshold: float = 400.0,
     ) -> None:
         if speech is None:
@@ -33,6 +33,8 @@ class GoogleSpeechService:
         self.language_code = language_code
         self.sample_rate = sample_rate
         self.enable_punctuation = enable_punctuation
+        # Lower the chunk size for faster, more responsive transcripts.
+        # (Previously 3.5s/8s; now 1.0s min, 4.0s max)
         self.min_chunk_seconds = min_chunk_seconds
         self.max_buffer_seconds = max_buffer_seconds
         self.silence_rms_threshold = silence_rms_threshold

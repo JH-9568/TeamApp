@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
@@ -54,6 +55,7 @@ async def add_attendee(
         attendee=MeetingAttendeeResponse(
             id=attendee.id,
             user_id=attendee.user_id,
+            user_name=attendee.user.name if attendee.user else None,
             guest_name=attendee.guest_name,
             joined_at=attendee.joined_at,
         )
@@ -70,6 +72,7 @@ async def list_attendees(
 
     stmt = (
         select(MeetingAttendee)
+        .options(selectinload(MeetingAttendee.user))
         .where(MeetingAttendee.meeting_id == meeting.id)
         .order_by(MeetingAttendee.joined_at.asc())
     )
@@ -81,6 +84,7 @@ async def list_attendees(
             MeetingAttendeeResponse(
                 id=row.id,
                 user_id=row.user_id,
+                user_name=row.user.name if row.user else None,
                 guest_name=row.guest_name,
                 joined_at=row.joined_at,
             )

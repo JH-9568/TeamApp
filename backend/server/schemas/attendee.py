@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import constr
+from pydantic import constr, Field
 
 from .base import SchemaBase
 
@@ -15,6 +15,7 @@ class MeetingAttendeeCreateRequest(SchemaBase):
 class MeetingAttendeeResponse(SchemaBase):
     id: UUID
     user_id: Optional[UUID] = None
+    user_name: Optional[str] = Field(None, alias="userName")
     guest_name: Optional[str] = None
     joined_at: Optional[datetime] = None
 

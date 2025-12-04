@@ -52,6 +52,8 @@ class DashboardActionItem {
   factory DashboardActionItem.fromJson(Map<String, dynamic> json) {
     DateTime? parseDate(String? value) =>
         value == null ? null : DateTime.tryParse(value);
+    final meetingIdValue = json['meetingId']?.toString() ?? '';
+    final parsedMeetingTitle = json['meetingTitle'] as String?;
     return DashboardActionItem(
       id: json['id'] as String,
       meetingId: json['meetingId'] as String,
@@ -59,7 +61,9 @@ class DashboardActionItem {
       assignee: json['assignee'] as String,
       content: json['content'] as String,
       status: json['status'] as String,
-      meetingTitle: json['meetingTitle'] as String?,
+      meetingTitle: (parsedMeetingTitle == null || parsedMeetingTitle.isEmpty)
+          ? (meetingIdValue.isNotEmpty ? '회의 $meetingIdValue' : null)
+          : parsedMeetingTitle,
       meetingDate: parseDate(json['meetingDate'] as String?),
       dueDate: parseDate(json['dueDate'] as String?),
       assigneeUserId: json['assigneeUserId'] as String?,

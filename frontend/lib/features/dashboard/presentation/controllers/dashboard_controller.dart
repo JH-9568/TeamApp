@@ -89,14 +89,11 @@ class DashboardController extends StateNotifier<DashboardState> {
         status: status,
         dueDate: dueDate,
       );
-      final updatedItems = [item, ...current.actionItems];
+      // Refresh dashboard to ensure meeting title/date and counts are accurate.
+      final refreshed = await _repository.fetchDashboard(current.team.id);
       state = state.copyWith(
         isCreatingActionItem: false,
-        data: DashboardData(
-          team: current.team,
-          actionItems: updatedItems,
-          meetings: current.meetings,
-        ),
+        data: refreshed,
       );
     } on UnauthorizedException catch (error) {
       debugPrint(

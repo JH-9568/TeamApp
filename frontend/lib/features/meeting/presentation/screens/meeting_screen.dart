@@ -7,6 +7,7 @@ import 'package:record/record.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:frontend/features/auth/providers.dart';
+import 'package:frontend/features/dashboard/providers.dart';
 import 'package:frontend/app/routes.dart';
 
 import '../../models/meeting_models.dart';
@@ -99,6 +100,10 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
     final state = ref.watch(meetingControllerProvider(meetingId));
     final controller = ref.read(meetingControllerProvider(meetingId).notifier);
     final meeting = state.meeting;
+    // Ensure local timer anchor is set once when meeting is in-progress.
+    if (meeting != null && meeting.status == 'in-progress' && _localStart == null) {
+      _localStart = _parseStartDateTime(meeting) ?? DateTime.now();
+    }
     final isLoading = state.isLoading && meeting == null;
     final authUser = ref.watch(authControllerProvider).session?.user;
 
@@ -115,6 +120,13 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
               onEndMeeting: () async {
                 await controller.endMeeting();
                 await _stopMic();
+                if (meeting?.teamId != null) {
+                  await ref
+                      .read(
+                        dashboardControllerProvider(meeting!.teamId).notifier,
+                      )
+                      .refresh(meeting!.teamId);
+                }
                 if (!mounted) return;
                 context.go(AppRoute.dashboard.path);
               },

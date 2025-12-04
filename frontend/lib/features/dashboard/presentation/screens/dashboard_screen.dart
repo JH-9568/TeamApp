@@ -1151,11 +1151,14 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalMeetings = data?.meetings.length ?? 0;
+    final normalizedUserName =
+        (userName ?? '').trim().toLowerCase();
     final myItems = (data?.actionItems ?? []).where((item) {
-      final idMatch =
-          userId != null && item.assigneeUserId != null && item.assigneeUserId == userId;
-      final nameMatch = (userName != null && userName!.isNotEmpty)
-          ? item.assignee.trim() == userName!.trim()
+      final idMatch = userId != null &&
+          item.assigneeUserId != null &&
+          item.assigneeUserId == userId;
+      final nameMatch = normalizedUserName.isNotEmpty
+          ? item.assignee.trim().toLowerCase() == normalizedUserName
           : false;
       return idMatch || nameMatch;
     }).toList();

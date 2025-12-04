@@ -180,21 +180,30 @@ class MeetingAttendee {
   const MeetingAttendee({
     required this.id,
     this.userId,
+    this.userName,
     this.guestName,
     this.joinedAt,
   });
 
   final String id;
   final String? userId;
+  final String? userName;
   final String? guestName;
   final String? joinedAt;
 
-  String get displayName => guestName ?? '참여자';
+  String get displayName {
+    final name = (userName ?? '').trim();
+    if (name.isNotEmpty) return name;
+    final guest = (guestName ?? '').trim();
+    if (guest.isNotEmpty) return guest;
+    return '참여자';
+  }
 
   factory MeetingAttendee.fromJson(Map<String, dynamic> json) {
     return MeetingAttendee(
       id: json['id']?.toString() ?? '',
       userId: json['userId']?.toString(),
+      userName: json['userName'] as String?,
       guestName: json['guestName'] as String?,
       joinedAt: json['joinedAt']?.toString(),
     );

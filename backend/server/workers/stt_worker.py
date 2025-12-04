@@ -10,8 +10,10 @@ from datetime import datetime
 from typing import Any
 
 from ..config import STT_POLL_INTERVAL
+from uuid import UUID
+
 from ..db import AsyncSessionLocal
-from ..models import Meeting, Transcript
+from ..models import Meeting, Transcript, User
 from ..redis import get_redis, meeting_channel, serialize_message
 from ..services.stt import STTNotAvailableError, get_stt_service
 
@@ -61,6 +63,21 @@ async def _handle_chunk(meeting_id: uuid.UUID, payload: dict[str, Any]) -> None:
     if _is_silence_base64(chunk_base64):
         logger.debug("Skipping silent audio chunk for meeting %s", meeting_id)
         return
+
+    # If client didn't send a speaker label, try to resolve from userId.
+    if not chunk_speaker:
+        user_id_val = payload.get("userId")
+        if user_id_val:
+            try:
+                user_uuid = UUID(str(user_id_val))
+                async with AsyncSessionLocal() as session:
+                    user = await session.get(User, user_uuid)
+                    if user and user.name:
+                        chunk_speaker = user.name
+                    elif user and user.email:
+                        chunk_speaker = user.email
+            except Exception:
+                pass
 
     stt_service = get_stt_service()
     text = await stt_service.transcribe_base64(meeting_id, chunk_base64)

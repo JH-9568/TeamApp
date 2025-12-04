@@ -22,6 +22,7 @@ class MeetingState {
     this.errorMessage,
     this.meeting,
     this.attendees = const [],
+    this.localStart,
   });
 
   final bool isLoading;
@@ -33,6 +34,7 @@ class MeetingState {
   final String? errorMessage;
   final MeetingDetail? meeting;
   final List<MeetingAttendee> attendees;
+  final DateTime? localStart;
 
   List<TranscriptSegment> get transcripts => meeting?.transcripts ?? [];
 
@@ -50,6 +52,7 @@ class MeetingState {
     Object? errorMessage = _unset,
     MeetingDetail? meeting,
     List<MeetingAttendee>? attendees,
+    DateTime? localStart,
   }) {
     return MeetingState(
       isLoading: isLoading ?? this.isLoading,
@@ -64,6 +67,7 @@ class MeetingState {
           : errorMessage as String?,
       meeting: meeting ?? this.meeting,
       attendees: attendees ?? this.attendees,
+      localStart: localStart ?? this.localStart,
     );
   }
 }
@@ -101,10 +105,14 @@ class MeetingController extends StateNotifier<MeetingState> {
       final attendees = await _repository.fetchAttendees(meetingId);
       final transcript = await _repository.fetchTranscript(meetingId);
       final mergedMeeting = meeting.copyWith(transcripts: transcript);
+      final startAnchor = state.localStart ??
+          _parseStartDateTime(mergedMeeting) ??
+          DateTime.now();
       state = state.copyWith(
         isLoading: false,
         meeting: mergedMeeting,
         attendees: attendees,
+        localStart: startAnchor,
         errorMessage: null,
       );
     } catch (error, stack) {
@@ -246,6 +254,32 @@ class MeetingController extends StateNotifier<MeetingState> {
     final stats = _computeSpeakerStats(meeting.transcripts);
     final meetingWithStats = meeting.copyWith(speakerStats: stats);
     state = state.copyWith(meeting: meetingWithStats);
+  }
+
+  DateTime? _parseStartDateTime(MeetingDetail meeting) {
+    final time = meeting.startTime;
+    if (time == null || time.isEmpty) return null;
+
+    DateTime baseDate = DateTime.now();
+    if (meeting.date != null && meeting.date!.isNotEmpty) {
+      try {
+        baseDate = DateTime.parse(meeting.date!);
+      } catch (_) {}
+    }
+
+    final parts = time.split(':');
+    if (parts.length < 2) return null;
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+
+    final utcDate = DateTime.utc(
+      baseDate.year,
+      baseDate.month,
+      baseDate.day,
+      hour,
+      minute,
+    );
+    return utcDate.toLocal();
   }
 
   Future<void> _registerAttendee() async {
@@ -426,7 +460,7 @@ class MeetingController extends StateNotifier<MeetingState> {
     }
     final rms = sqrt(sum / sampleCount);
     // Treat very low RMS as silence; keep threshold modest to avoid dropping speech
-    return rms < 800;
+    return rms < 500;
   }
 
   List<SpeakerStat> _computeSpeakerStats(List<TranscriptSegment> transcripts) {

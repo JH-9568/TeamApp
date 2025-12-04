@@ -35,7 +35,6 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
   bool _isMuted = true;
   bool _isMicActive = false;
   Timer? _ticker;
-  DateTime? _localStart;
 
   @override
   void dispose() {
@@ -81,10 +80,8 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
       final meetingEnded = prevStatus == 'in-progress' && nextStatus != 'in-progress';
 
       if (meetingStarted) {
-        _localStart = DateTime.now();
         _startMicStreaming(meetingId);
       } else if (meetingEnded) {
-        _localStart = null;
         _stopMic();
       }
 
@@ -100,10 +97,6 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
     final state = ref.watch(meetingControllerProvider(meetingId));
     final controller = ref.read(meetingControllerProvider(meetingId).notifier);
     final meeting = state.meeting;
-    // Ensure local timer anchor is set once when meeting is in-progress.
-    if (meeting != null && meeting.status == 'in-progress' && _localStart == null) {
-      _localStart = _parseStartDateTime(meeting) ?? DateTime.now();
-    }
     final isLoading = state.isLoading && meeting == null;
     final authUser = ref.watch(authControllerProvider).session?.user;
 
@@ -114,7 +107,7 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
           children: [
             MeetingTopBar(
               meetingTitle: meeting?.title ?? '회의',
-              timerLabel: _timerLabel(meeting),
+              timerLabel: _timerLabel(meeting, state.localStart),
               status: meeting?.status ?? 'scheduled',
               isRecording: meeting?.status == 'in-progress',
               onEndMeeting: () async {
@@ -280,20 +273,20 @@ class _MeetingScreenState extends ConsumerState<MeetingScreen> {
     });
   }
 
-  String _timerLabel(MeetingDetail? meeting) {
+  String _timerLabel(MeetingDetail? meeting, DateTime? startAnchor) {
     if (meeting == null) return '00:00:00';
 
     final storedMinutes = meeting.duration ?? 0;
     if (meeting.status == 'completed') {
       final durationMinutes = storedMinutes > 0
           ? storedMinutes
-          : _computeDurationFromTimes(meeting) ?? 0;
+        : _computeDurationFromTimes(meeting) ?? 0;
       final hours = durationMinutes ~/ 60;
       final mins = durationMinutes % 60;
       return '${hours.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}:00';
     }
 
-    final start = _localStart ?? _parseStartDateTime(meeting);
+    final start = startAnchor ?? _parseStartDateTime(meeting);
     if (start == null) return '00:00:00';
     final elapsed = DateTime.now().difference(start);
     final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
